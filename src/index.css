@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --paper-cream: #FAF7EE;
+    --paper-green: #F3F7F0;
+    --ink-dark: #1A3320;
+    --forest-accent: #2D4A34;
+    --moss-green: #52796F;
+    --sage-clay: #85A98F;
+    --warm-gold: #FFDE59;
+    --terracotta: #C38D9E;
+  }
+
+  body {
+    font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+    background-color: var(--paper-green);
+    color: var(--ink-dark);
+  }
+}
+
+/* 纸张微质感与纤维点缀 */
+.paper-bg {
+  background-color: #F3F7F0;
+  background-image: 
+    radial-gradient(#1A3320 0.5px, transparent 0.5px), 
+    radial-gradient(#2D4A34 0.35px, #F3F7F0 0.35px);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
+}
+
+.parchment-sheet {
+  background-color: #FAF7EE;
+  background-image: linear-gradient(135deg, rgba(245, 239, 222, 0.9) 0%, rgba(250, 247, 238, 0.98) 100%);
+  box-shadow: 
+    0 1px 3px rgba(26, 51, 32, 0.08),
+    0 8px 24px -4px rgba(26, 51, 32, 0.06);
+}
+
+/* 手绘蜡笔/定格泥塑不规则边框 */
+.hand-drawn-border {
+  border: 2px solid #1A3320;
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+}
+
+.hand-drawn-border-sm {
+  border: 1.5px solid #1A3320;
+  border-radius: 220px 12px 200px 14px/14px 200px 12px 220px;
+}
+
+.hand-drawn-border-dashed {
+  border: 2px dashed rgba(26, 51, 32, 0.35);
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+}
+
+/* 粘土立体按压阴影 */
+.hand-drawn-box {
+  box-shadow: 3px 4px 0px 0px #1A3320;
+}
+
+.hand-drawn-box-sm {
+  box-shadow: 2px 2.5px 0px 0px #1A3320;
+}
+
+.hand-drawn-box-pressed:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1.5px 0px 0px #1A3320;
+}
+
+/* 便签贴纸胶带样式 */
+.washi-tape {
+  position: relative;
+}
+.washi-tape::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-1deg);
+  width: 70px;
+  height: 16px;
+  background-color: rgba(230, 215, 175, 0.7);
+  border: 1px dashed rgba(26, 51, 32, 0.3);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  pointer-events: none;
+}
+
+/* 手写与趣味字体 */
+.font-handwriting {
+  font-family: 'ZCOOL KuaiLe', 'Caveat', cursive, sans-serif;
+}
+
+/* 定格动效与微摆动 */
+@keyframes stop-motion-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-0.5deg) translate(-0.5px, 0.5px); }
+  75% { transform: rotate(0.5deg) translate(0.5px, -0.5px); }
+}
+
+.animate-clay-float {
+  animation: stop-motion-wiggle 4s steps(6, end) infinite;
+}
+
+/* 隐藏滚动条但保留功能 */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

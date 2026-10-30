@@ -1,0 +1,8 @@
+{
+  "name": "童眼看世界 · 小王子泥塑星体与师生共创空间",
+  "description": "电影《小王子》与秘密花园纸质立体书风格的教育探索展示网站，包含藤蔓之门穿透动画、3D泥塑定格地球、精确到县的填空级联选择与师生分流成果画卷。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
