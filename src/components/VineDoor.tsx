@@ -124,32 +124,33 @@ export default function VineDoor({ onZoomThrough }: VineDoorProps) {
           {/* 金色光晕扩散 */}
           <div className="absolute -inset-10 bg-radial from-[#FFDE59]/60 via-[#FFDE59]/20 to-transparent blur-xl pointer-events-none group-hover:scale-125 transition-transform duration-500" />
 
-          {/* 手绘眼睛外框（定格泥塑与剪纸质感） */}
-          <div className="relative w-28 h-18 bg-[#FAF7EE] hand-drawn-border hand-drawn-box flex items-center justify-center shadow-2xl overflow-hidden group-hover:scale-105 transition-transform duration-300">
-            {/* 上下眼睑纸质阴影 */}
-            <div className="absolute inset-0 border-t-4 border-b-4 border-[#1A3320]/30 pointer-events-none" />
+          {/* 纯软陶泥手捏眼睛外框 */}
+          <div className="relative w-32 h-20 clay-card flex items-center justify-center shadow-2xl overflow-hidden group-hover:scale-105 transition-transform duration-200">
+            {/* 上下眼睑陶土按压阴影 */}
+            <div className="absolute inset-x-0 top-0 h-3 bg-[#D47A6A]/40 border-b-2 border-[#1E3824]/30 pointer-events-none" />
+            <div className="absolute inset-x-0 bottom-0 h-3 bg-[#6E9277]/40 border-t-2 border-[#1E3824]/30 pointer-events-none" />
 
-            {/* 灵动的眼球瞳孔 */}
+            {/* 灵动的玻璃定格眼球瞳孔 */}
             <div 
-              className={`w-10 h-10 rounded-full bg-[#1A3320] flex items-center justify-center transition-all duration-300 ${
-                isEyeHovered ? 'scale-110 translate-y-[-1px]' : 'scale-100'
+              className={`w-11 h-11 rounded-full bg-[#1E3824] border-2 border-[#162B1C] flex items-center justify-center transition-all duration-200 ${
+                isEyeHovered ? 'scale-110 -translate-y-0.5' : 'scale-100'
               }`}
             >
-              {/* 瞳孔内的星光高光（两颗反射光点） */}
-              <div className="w-3.5 h-3.5 rounded-full bg-white -translate-y-1 translate-x-1 shadow-sm" />
-              <div className="w-1.5 h-1.5 rounded-full bg-[#FFDE59] translate-y-1.5 -translate-x-1.5" />
+              {/* 瞳孔内的星光高光 */}
+              <div className="w-4 h-4 rounded-full bg-white -translate-y-1 translate-x-1 shadow-xs" />
+              <div className="w-1.5 h-1.5 rounded-full bg-[#E6B84A] translate-y-2 -translate-x-2" />
             </div>
 
-            {/* 纸质睫毛线 */}
-            <div className="absolute top-1 left-4 w-2 h-1 bg-[#1A3320] rotate-[-25deg]" />
-            <div className="absolute top-0.5 left-1/2 -translate-x-1/2 w-2 h-1 bg-[#1A3320]" />
-            <div className="absolute top-1 right-4 w-2 h-1 bg-[#1A3320] rotate-[25deg]" />
+            {/* 软陶睫毛压痕 */}
+            <div className="absolute top-1.5 left-5 w-2.5 h-1.5 bg-[#1E3824] rounded-full rotate-[-25deg]" />
+            <div className="absolute top-1 left-1/2 -translate-x-1/2 w-2.5 h-1.5 bg-[#1E3824] rounded-full" />
+            <div className="absolute top-1.5 right-5 w-2.5 h-1.5 bg-[#1E3824] rounded-full rotate-[25deg]" />
           </div>
 
-          {/* 手写指示词：“点击眼睛” */}
-          <div className="mt-5 px-4 py-1.5 bg-[#FAF7EE] border border-[#1A3320] rounded-full text-xs md:text-sm font-bold text-[#1A3320] hand-drawn-box flex items-center gap-2 group-hover:bg-[#85A98F] group-hover:text-white transition-all">
+          {/* 手写指示词按钮 */}
+          <div className="mt-5 clay-btn px-5 py-2 text-xs md:text-sm font-black flex items-center gap-2 group-hover:bg-[#5D8066]">
             <span>✨</span>
-            <span className="tracking-widest font-handwriting">轻触眼睛 · 穿透视界</span>
+            <span className="tracking-widest font-handwriting">轻触眼睛 · 穿透星体</span>
           </div>
         </div>
 

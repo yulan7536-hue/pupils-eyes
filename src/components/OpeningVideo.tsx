@@ -244,27 +244,27 @@ export default function OpeningVideo({ onComplete }: OpeningVideoProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-[#F3F7F0] select-none">
-      {/* 立体书外壳容器 */}
-      <div className="relative w-full max-w-4xl aspect-[16/9] parchment-sheet hand-drawn-border hand-drawn-box flex flex-col justify-between p-4 md:p-6 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-[#EAEFE6] select-none">
+      {/* 软陶泥定格立体画相框 */}
+      <div className="relative w-full max-w-4xl aspect-[16/9] clay-card flex flex-col justify-between p-5 md:p-7 overflow-hidden shadow-2xl">
         
-        {/* 顶部标签 */}
-        <div className="flex items-center justify-between border-b border-[#1A3320]/15 pb-2.5">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">📖</span>
+        {/* 顶部陶土标签 */}
+        <div className="flex items-center justify-between border-b-2 border-[#1E3824]/15 pb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl">📖</span>
             <div>
-              <h2 className="text-sm md:text-base font-bold text-[#1A3320] tracking-wide">
-                翻开立体书 · 小王子童心启程
+              <h2 className="text-sm md:text-base font-black text-[#1E3824] tracking-wide font-serif">
+                序章 · 翻开定格立体书
               </h2>
-              <p className="text-[11px] text-[#52796F]">
-                红围巾少年奔向校舍绿廊，藤蔓门后藏着星空与大地的回响
+              <p className="text-[11px] text-[#52796F] font-bold">
+                红围巾少年奔向校舍绿廊，藤蔓门后藏着星空与陶土的秘密
               </p>
             </div>
           </div>
 
           {/* 上传自定义视频入口 */}
-          <label className="flex items-center gap-1.5 px-3 py-1 bg-[#F3F7F0] hover:bg-[#85A98F] hover:text-white border border-[#1A3320] rounded-full text-xs cursor-pointer transition-colors hand-drawn-box-sm">
-            <Upload size={13} />
+          <label className="clay-card hover:bg-[#FAF5E8] flex items-center gap-1.5 px-3 py-1 text-xs cursor-pointer transition-colors font-bold text-[#1E3824]">
+            <Upload size={13} className="text-[#6E9277]" />
             <span className="hidden sm:inline">载入本地 MP4 视频</span>
             <span className="sm:hidden">换视频</span>
             <input 
@@ -277,7 +277,7 @@ export default function OpeningVideo({ onComplete }: OpeningVideoProps) {
         </div>
 
         {/* 核心视窗：真视频播放器 或 纯手绘定格动画 Canvas */}
-        <div className="relative flex-1 my-3 rounded-lg overflow-hidden border border-[#1A3320]/30 bg-[#2D4A34]/5 flex items-center justify-center">
+        <div className="relative flex-1 my-3.5 rounded-xl overflow-hidden border-2 border-[#1E3824] bg-[#2E4D36]/10 flex items-center justify-center shadow-inner">
           {customVideoSrc ? (
             <video
               ref={videoRef}
@@ -315,11 +315,11 @@ export default function OpeningVideo({ onComplete }: OpeningVideoProps) {
           )}
 
           {/* 覆盖一层旧纸张纹理暗角 */}
-          <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#1A3320]/15 via-transparent to-[#1A3320]/10 mix-blend-multiply" />
+          <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#162B1C]/20 via-transparent to-[#162B1C]/10 mix-blend-multiply" />
 
           {/* 动画标识 */}
-          <div className="absolute bottom-3 left-3 bg-[#FAF7EE]/90 border border-[#1A3320] px-2.5 py-0.5 rounded text-[11px] text-[#1A3320] flex items-center gap-1.5 shadow-sm">
-            <Sparkles size={12} className="text-[#85A98F]" />
+          <div className="absolute bottom-3 left-3 bg-[#FAF5E8]/95 border-2 border-[#1E3824] px-3 py-1 rounded-full text-[11px] text-[#1E3824] font-black flex items-center gap-1.5 shadow-xs">
+            <Sparkles size={13} className="text-[#E6B84A]" />
             <span>{!hasVideoFile && !customVideoSrc ? '定格手绘立体画卷渲染中' : '沉浸式影像播映中'}</span>
           </div>
         </div>
@@ -330,28 +330,28 @@ export default function OpeningVideo({ onComplete }: OpeningVideoProps) {
             <button
               type="button"
               onClick={toggleSound}
-              className="flex items-center gap-1.5 px-3 py-1 bg-[#FAF7EE] hover:bg-[#F3F7F0] border border-[#1A3320] rounded-full text-xs text-[#1A3320] transition-colors"
+              className="clay-card px-3 py-1 text-xs text-[#1E3824] font-bold flex items-center gap-1.5 hover:bg-[#FAF5E8]"
             >
-              {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} className="text-[#85A98F]" />}
+              {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} className="text-[#6E9277]" />}
               <span>{isMuted ? '开启声音' : '静音'}</span>
             </button>
 
             {/* 播放进度指示 */}
             <div className="hidden sm:flex items-center gap-2 text-xs text-[#52796F]">
-              <div className="w-24 h-1.5 bg-[#1A3320]/15 rounded-full overflow-hidden">
+              <div className="w-24 h-2 bg-[#1E3824]/20 rounded-full overflow-hidden border border-[#1E3824]/40">
                 <div 
-                  className="h-full bg-[#85A98F] transition-all duration-200"
+                  className="h-full bg-[#6E9277] transition-all duration-200"
                   style={{ width: `${progress}%` }} 
                 />
               </div>
-              <span className="font-mono text-[11px]">8.5s 序章</span>
+              <span className="font-mono text-[11px] font-bold">8.5s 序章</span>
             </div>
           </div>
 
           <button
             type="button"
             onClick={handleSkip}
-            className="flex items-center gap-1.5 px-5 py-2 bg-[#85A98F] hover:bg-[#52796F] text-white text-xs md:text-sm font-bold rounded-full hand-drawn-border hand-drawn-box hand-drawn-box-pressed transition-all"
+            className="clay-btn px-5 py-2 text-xs md:text-sm font-black flex items-center gap-2"
           >
             <span>翻过此页，推开藤蔓门</span>
             <FastForward size={14} />

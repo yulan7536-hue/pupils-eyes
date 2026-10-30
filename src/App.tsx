@@ -218,25 +218,25 @@ export default function App() {
           />
 
           {/* 上半部：3D 泥塑小王子定格地球探索区 */}
-          <section className="relative w-full h-[76vh] md:h-[80vh] border-b border-[#1A3320]/20 bg-[#F3F7F0] overflow-hidden">
-            {/* 左上角手绘标题说明卡片 */}
+          <section className="relative w-full h-[76vh] md:h-[80vh] border-b-2 border-[#1E3824] bg-[#EAEFE6] overflow-hidden">
+            {/* 左上角手捏黏土标题说明卡片 */}
             <div className="absolute top-5 left-5 z-20 max-w-sm pointer-events-auto">
-              <div className="parchment-sheet p-4 hand-drawn-border hand-drawn-box">
-                <div className="flex items-center gap-2 text-xs text-[#52796F] font-bold uppercase tracking-wider mb-1">
-                  <Compass size={14} className="text-[#85A98F]" />
+              <div className="clay-card p-5">
+                <div className="flex items-center gap-2 text-xs text-[#52796F] font-black uppercase tracking-wider mb-1">
+                  <Compass size={15} className="text-[#6E9277]" />
                   <span>Stop-Motion Clay Planet</span>
                 </div>
-                <h1 className="text-lg md:text-xl font-bold tracking-tight text-[#1A3320]">
+                <h1 className="text-xl md:text-2xl font-black tracking-tight text-[#1E3824] font-serif">
                   童眼看世界 · 定格星体探索
                 </h1>
-                <p className="text-xs text-[#52796F] mt-1.5 leading-relaxed">
-                  拖拽旋转定格黏土打造的绿色星球，轻触中国区域的泥塑图钉翻开各地区师生的自然观察手记。
+                <p className="text-xs text-[#52796F] mt-2 leading-relaxed font-serif">
+                  拖拽旋转定格黏土打造的绿色星球，轻触中国区域的陶土图钉翻开各地区师生的自然观察手记。
                 </p>
                 
                 {/* 快捷点位切换胶囊 */}
-                <div className="mt-3 pt-2.5 border-t border-[#1A3320]/15 flex flex-wrap gap-1.5">
-                  <span className="text-[11px] text-[#52796F] self-center">热点坐标：</span>
-                  {pins.slice(0, 3).map((p) => (
+                <div className="mt-3.5 pt-3 border-t-2 border-[#1E3824]/15 flex flex-wrap gap-1.5 items-center">
+                  <span className="text-[11px] font-black text-[#52796F]">热点坐标：</span>
+                  {pins.slice(0, 4).map((p) => (
                     <button
                       key={p.id}
                       type="button"
@@ -244,7 +244,7 @@ export default function App() {
                         setActiveTargetCoord({ lat: p.lat, lon: p.lon });
                         setSelectedPin(p);
                       }}
-                      className="px-2 py-0.5 text-[11px] bg-[#F3F7F0] hover:bg-[#85A98F] hover:text-white border border-[#1A3320] rounded-full transition-colors"
+                      className="px-2.5 py-0.5 text-[11px] font-bold bg-[#FAF5E8] hover:bg-[#6E9277] hover:text-[#FAF5E8] border-2 border-[#1E3824] rounded-full transition-colors shadow-xs"
                     >
                       {p.city.split('·').pop()}
                     </button>
@@ -261,9 +261,9 @@ export default function App() {
                   storySound.playPaperTurn();
                   setIsCreateModalOpen(true);
                 }}
-                className="px-5 py-2.5 bg-[#FAF7EE] hover:bg-[#85A98F] text-[#1A3320] hover:text-white font-bold text-xs md:text-sm hand-drawn-border hand-drawn-box hand-drawn-box-pressed transition-all flex items-center gap-2"
+                className="clay-btn px-5 py-2.5 font-black text-xs md:text-sm flex items-center gap-2"
               >
-                <Sparkles size={16} className="text-[#85A98F] group-hover:text-white" />
+                <Sparkles size={16} className="text-[#E6B84A]" />
                 <span>童眼看 ______ (上传成果)</span>
               </button>
             </div>

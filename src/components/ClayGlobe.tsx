@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { storySound } from '../utils/sound';
+import {
+  createClayAlbedoTexture,
+  createClayNormalTexture,
+  createClayTree,
+  createClayMountain,
+  createLittlePrinceB612,
+} from '../utils/clayTextures';
 
 export interface PinItem {
   id: string;
@@ -32,41 +39,40 @@ function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector
   return new THREE.Vector3(x, y, z);
 }
 
-// 动态创建手绘撕纸图钉铭牌纹理（带有小王子纸质标签风格）
+// 动态创建手绘撕纸图钉旗标
 function createPinLabelTexture(cityName: string, title: string, isTeacher: boolean): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
-  canvas.height = 80;
+  canvas.height = 84;
   const ctx = canvas.getContext('2d');
 
   if (ctx) {
-    // 纸质底色
-    ctx.fillStyle = '#FAF7EE';
-    ctx.strokeStyle = '#1A3320';
-    ctx.lineWidth = 3;
+    // 粗糙撕纸底色
+    ctx.fillStyle = '#FAF5E8';
+    ctx.strokeStyle = '#1E3824';
+    ctx.lineWidth = 3.5;
 
-    // 手绘圆角矩形
     ctx.beginPath();
-    ctx.roundRect(6, 6, 244, 68, 8);
+    ctx.roundRect(6, 6, 244, 72, 8);
     ctx.fill();
     ctx.stroke();
 
-    // 撕纸胶带角标
-    ctx.fillStyle = isTeacher ? '#E27D60' : '#85A98F';
-    ctx.fillRect(16, 2, 45, 8);
+    // 顶部黏土贴胶
+    ctx.fillStyle = isTeacher ? '#D47A6A' : '#6E9277';
+    ctx.fillRect(16, 2, 50, 10);
 
-    // 城市与标题文字
-    ctx.fillStyle = '#1A3320';
+    // 城市文字
+    ctx.fillStyle = '#1E3824';
     ctx.font = 'bold 22px "Noto Serif SC", serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     const displayCity = cityName.split('·').pop() || cityName;
-    ctx.fillText(`📍 ${displayCity}`, 18, 32);
+    ctx.fillText(`📍 ${displayCity}`, 18, 36);
 
     ctx.fillStyle = '#52796F';
-    ctx.font = '16px "Noto Serif SC", serif';
+    ctx.font = '15px "Noto Serif SC", serif';
     const shortTitle = title.length > 9 ? title.slice(0, 9) + '...' : title;
-    ctx.fillText(shortTitle, 20, 56);
+    ctx.fillText(shortTitle, 20, 60);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -90,7 +96,6 @@ export default function ClayGlobe({
   const globeGroupRef = useRef<THREE.Group | null>(null);
   const pinsGroupRef = useRef<THREE.Group | null>(null);
   const ripplesGroupRef = useRef<THREE.Group | null>(null);
-  const particlesGroupRef = useRef<THREE.Group | null>(null);
 
   // 四元数目标平滑旋转
   const targetQuaternionRef = useRef<THREE.Quaternion | null>(null);
@@ -106,22 +111,18 @@ export default function ClayGlobe({
     rippleMesh: THREE.Mesh | null;
   } | null>(null);
 
-  // 响应外部新坐标：利用四元数直接把该点精准旋转对准摄像机视野正中心！
+  // 响应外部新坐标：利用四元数把该点精准旋转对准摄像机视野正中心
   useEffect(() => {
     if (!activeTargetCoord || !globeGroupRef.current || !cameraRef.current) return;
     const { lat, lon } = activeTargetCoord;
 
-    // 获取该点在球体坐标系下的局部法向量
     const localTarget = latLonToVector3(lat, lon, 1.0).normalize();
-    // 摄像机方向（略带俯视，更加自然）
-    const desiredDir = new THREE.Vector3(0, 0.25, 1.0).normalize();
+    const desiredDir = new THREE.Vector3(0, 0.22, 1.0).normalize();
 
-    // 计算将 localTarget 旋转到 desiredDir 所需的四元数
     const targetQuat = new THREE.Quaternion().setFromUnitVectors(localTarget, desiredDir);
     targetQuaternionRef.current = targetQuat;
     isTargetingRef.current = true;
 
-    // 播放音效
     storySound.playPinDrop();
   }, [activeTargetCoord]);
 
@@ -133,15 +134,13 @@ export default function ClayGlobe({
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // 1. 初始化场景与相机
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.set(0, 1.3, 5.2);
+    camera.position.set(0, 1.25, 5.2);
     cameraRef.current = camera;
 
-    // 2. 渲染器配置
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
@@ -151,132 +150,176 @@ export default function ClayGlobe({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.18;
+    renderer.toneMappingExposure = 1.2;
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // 3. 温暖定格黏土三点工作室光照
-    const ambientLight = new THREE.AmbientLight(0xfff8ed, 1.25);
+    // 1. 定格动画影棚温暖灯光 RIG（3200K 白炽暖光 Key Light + 抹茶绿漫射 Fill Light）
+    const ambientLight = new THREE.AmbientLight(0xfff5e6, 1.35);
     scene.add(ambientLight);
 
-    const keyLight = new THREE.DirectionalLight(0xfffae6, 2.2);
-    keyLight.position.set(4.5, 5.5, 4.0);
+    const keyLight = new THREE.DirectionalLight(0xfff0d0, 2.4);
+    keyLight.position.set(4.5, 6.0, 4.2);
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0x85a98f, 1.0);
-    fillLight.position.set(-4.5, -2.5, -3.0);
+    const fillLight = new THREE.DirectionalLight(0x7fa389, 1.1);
+    fillLight.position.set(-4.5, -2.5, -3.2);
     scene.add(fillLight);
 
-    // 4. 地球总组
+    // 2. 地球总组
     const globeGroup = new THREE.Group();
-    // 默认初始角度面向中国区域（东经 105°，北纬 35°）
+    // 初始角度朝向中国区域（东经 105°，北纬 35°）
     const initialTarget = latLonToVector3(35, 105, 1.0).normalize();
     const initialDesired = new THREE.Vector3(0, 0.2, 1.0).normalize();
     globeGroup.quaternion.setFromUnitVectors(initialTarget, initialDesired);
     scene.add(globeGroup);
     globeGroupRef.current = globeGroup;
 
-    // 5. 泥塑地球主体 (球体半径 2.0)
+    // 3. 核心：手捏黏土纹理地球主体 (Stop-Motion Clay Earth)
     const earthRadius = 2.0;
-    const earthGeom = new THREE.SphereGeometry(earthRadius, 54, 54);
+    const earthGeom = new THREE.SphereGeometry(earthRadius, 64, 64);
 
-    // 给顶点注入微小手捏黏土的粗糙肌理
+    // 手捏不规则变形（大拇指按压起伏）
     const posAttr = earthGeom.attributes.position;
     for (let i = 0; i < posAttr.count; i++) {
       const vx = posAttr.getX(i);
       const vy = posAttr.getY(i);
       const vz = posAttr.getZ(i);
       const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
-      const bump = Math.sin(vx * 4.2) * Math.cos(vy * 4.2) * 0.022;
-      posAttr.setXYZ(i, (vx / len) * (earthRadius + bump), (vy / len) * (earthRadius + bump), (vz / len) * (earthRadius + bump));
+      // 复合手捏起伏
+      const thumbDents = Math.sin(vx * 3.5) * Math.cos(vy * 3.5) * 0.028 + Math.sin(vz * 6.0) * 0.015;
+      posAttr.setXYZ(i, (vx / len) * (earthRadius + thumbDents), (vy / len) * (earthRadius + thumbDents), (vz / len) * (earthRadius + thumbDents));
     }
     earthGeom.computeVertexNormals();
 
+    // 注入手捏指纹法线与大理石抹茶软陶泥漫反射
+    const clayAlbedo = createClayAlbedoTexture(1024, 512);
+    const clayNormal = createClayNormalTexture(512, 512);
+
     const earthMat = new THREE.MeshStandardMaterial({
-      color: 0x7FA389, // 定格动画同款抹茶绿泥土
-      roughness: 0.88,
-      metalness: 0.04,
+      map: clayAlbedo,
+      normalMap: clayNormal,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughness: 0.86,
+      metalness: 0.03,
     });
     const earthMesh = new THREE.Mesh(earthGeom, earthMat);
     globeGroup.add(earthMesh);
 
-    // 6. 手绘大陆经纬纸纹层
-    const wireGeom = new THREE.SphereGeometry(earthRadius + 0.006, 28, 28);
-    const wireMat = new THREE.MeshBasicMaterial({
-      color: 0xFAF7EE,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.14,
-    });
-    const wireMesh = new THREE.Mesh(wireGeom, wireMat);
-    globeGroup.add(wireMesh);
-
-    // 7. 中国区域金色暖光温润漫射辉光
-    const chinaPos = latLonToVector3(35, 105, earthRadius + 0.02);
+    // 4. 定格大陆板块厚切泥片 (Clay Cutout Continents)
+    // 中国区域厚切陶土块（像用擀面杖压扁切好的厚泥片贴在球体上）
+    const chinaCenter = latLonToVector3(35, 105, earthRadius + 0.03);
     const chinaGroup = new THREE.Group();
-    chinaGroup.position.copy(chinaPos);
-    chinaGroup.lookAt(chinaPos.clone().multiplyScalar(2));
+    chinaGroup.position.copy(chinaCenter);
+    chinaGroup.lookAt(chinaCenter.clone().multiplyScalar(2));
 
-    const glowCircleGeom = new THREE.CircleGeometry(0.76, 32);
+    // 厚泥片大陆边缘
+    const slabGeom = new THREE.CylinderGeometry(0.78, 0.82, 0.04, 32);
+    const slabMat = new THREE.MeshStandardMaterial({
+      color: 0x98B99D, // 浅抹茶黄泥
+      roughness: 0.82,
+      metalness: 0.02,
+    });
+    const chinaSlab = new THREE.Mesh(slabGeom, slabMat);
+    chinaSlab.rotation.x = Math.PI / 2;
+    chinaGroup.add(chinaSlab);
+
+    // 金黄色温暖漫射光晕
+    const glowCircleGeom = new THREE.RingGeometry(0.76, 1.05, 32);
     const glowCircleMat = new THREE.MeshBasicMaterial({
-      color: 0xFFDE59,
+      color: 0xE6B84A,
       transparent: true,
-      opacity: 0.36,
+      opacity: 0.28,
       side: THREE.DoubleSide,
     });
     const glowCircle = new THREE.Mesh(glowCircleGeom, glowCircleMat);
     chinaGroup.add(glowCircle);
 
-    // 外圈细金环
-    const outerRingGeom = new THREE.RingGeometry(0.72, 0.98, 32);
-    const outerRingMat = new THREE.MeshBasicMaterial({
-      color: 0xFFDE59,
-      transparent: true,
-      opacity: 0.18,
-      side: THREE.DoubleSide,
-    });
-    const outerRing = new THREE.Mesh(outerRingGeom, outerRingMat);
-    chinaGroup.add(outerRing);
-
     globeGroup.add(chinaGroup);
 
-    // 8. 图钉总组
+    // 5. 球体上散落的手捏 3D 定格山峦与松树 (Procedural Mountains & Trees)
+    const landscapeGroup = new THREE.Group();
+
+    // 在青藏高原与大理苍山位置种上手捏小山峰
+    const mountain1 = createClayMountain(0.22);
+    const posMount1 = latLonToVector3(32, 92, earthRadius + 0.02);
+    mountain1.position.copy(posMount1);
+    mountain1.lookAt(posMount1.clone().multiplyScalar(2));
+    mountain1.rotateX(Math.PI / 2);
+    landscapeGroup.add(mountain1);
+
+    const mountain2 = createClayMountain(0.18);
+    const posMount2 = latLonToVector3(26, 100, earthRadius + 0.02);
+    mountain2.position.copy(posMount2);
+    mountain2.lookAt(posMount2.clone().multiplyScalar(2));
+    mountain2.rotateX(Math.PI / 2);
+    landscapeGroup.add(mountain2);
+
+    // 在安吉竹林、四川盆地种上手捏黏土树
+    const tree1 = createClayTree(0.16);
+    const posTree1 = latLonToVector3(30, 119, earthRadius + 0.02);
+    tree1.position.copy(posTree1);
+    tree1.lookAt(posTree1.clone().multiplyScalar(2));
+    tree1.rotateX(Math.PI / 2);
+    landscapeGroup.add(tree1);
+
+    const tree2 = createClayTree(0.14);
+    const posTree2 = latLonToVector3(29, 103, earthRadius + 0.02);
+    tree2.position.copy(posTree2);
+    tree2.lookAt(posTree2.clone().multiplyScalar(2));
+    tree2.rotateX(Math.PI / 2);
+    landscapeGroup.add(tree2);
+
+    globeGroup.add(landscapeGroup);
+
+    // 6. 环绕公转的《小王子》B612 小行星（带红陶玫瑰与玻璃罩）
+    const b612Group = new THREE.Group();
+    const b612 = createLittlePrinceB612();
+    b612.position.set(2.8, 0.8, -0.6);
+    b612Group.add(b612);
+    scene.add(b612Group);
+
+    // 7. 定格手捏蓬松白泥小云团
+    const cloudsGroup = new THREE.Group();
+    for (let c = 0; c < 8; c++) {
+      const angle = (c / 8) * Math.PI * 2;
+      const dist = earthRadius + 0.52 + Math.sin(c * 3) * 0.15;
+      const cy = Math.cos(c * 2) * 0.85;
+
+      const cloudComposite = new THREE.Group();
+      const cloudMat = new THREE.MeshStandardMaterial({
+        color: 0xFAF5E8,
+        roughness: 0.95,
+      });
+
+      // 3 个手捏小泥球并排捏成一朵云
+      const b1 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.11, 1), cloudMat);
+      const b2 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.15, 1), cloudMat);
+      b2.position.set(0.12, 0.03, 0);
+      const b3 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.10, 1), cloudMat);
+      b3.position.set(0.24, -0.02, 0);
+      cloudComposite.add(b1, b2, b3);
+
+      cloudComposite.position.set(Math.cos(angle) * dist, cy, Math.sin(angle) * dist);
+      cloudComposite.scale.set(0.9, 0.9, 0.9);
+      cloudsGroup.add(cloudComposite);
+    }
+    globeGroup.add(cloudsGroup);
+
+    // 8. 图钉与震荡波总组
     const pinsGroup = new THREE.Group();
     globeGroup.add(pinsGroup);
     pinsGroupRef.current = pinsGroup;
 
-    // 9. 动态水波纹/泥土震荡组
     const ripplesGroup = new THREE.Group();
     globeGroup.add(ripplesGroup);
     ripplesGroupRef.current = ripplesGroup;
 
-    // 10. 爆裂星光粒子组
-    const particlesGroup = new THREE.Group();
-    globeGroup.add(particlesGroup);
-    particlesGroupRef.current = particlesGroup;
-
-    // 11. 环绕的小王子微云
-    const satellitesGroup = new THREE.Group();
-    for (let c = 0; c < 7; c++) {
-      const angle = (c / 7) * Math.PI * 2;
-      const dist = earthRadius + 0.55 + Math.sin(c * 2) * 0.18;
-      const cy = Math.cos(c * 2.5) * 0.75;
-      const cloudGeom = new THREE.DodecahedronGeometry(0.12, 0);
-      const cloudMat = new THREE.MeshStandardMaterial({
-        color: 0xFAF7EE,
-        roughness: 0.9,
-      });
-      const cloud = new THREE.Mesh(cloudGeom, cloudMat);
-      cloud.position.set(Math.cos(angle) * dist, cy, Math.sin(angle) * dist);
-      satellitesGroup.add(cloud);
-    }
-    globeGroup.add(satellitesGroup);
-
-    // 12. 交互控制：鼠标拖拽与射线检测
+    // 9. 鼠标与触摸交互
     const handleMouseDown = (e: MouseEvent) => {
       isDraggingRef.current = true;
-      isTargetingRef.current = false; // 取消强制追踪
+      isTargetingRef.current = false;
       prevMouseRef.current = { x: e.clientX, y: e.clientY };
     };
 
@@ -289,7 +332,6 @@ export default function ClayGlobe({
         const deltaX = e.clientX - prevMouseRef.current.x;
         const deltaY = e.clientY - prevMouseRef.current.y;
 
-        // 使用轴角四元数旋转
         const rotY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), deltaX * 0.006);
         const rotX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), deltaY * 0.006);
         globeGroupRef.current.quaternion.premultiply(rotY);
@@ -361,7 +403,6 @@ export default function ClayGlobe({
       }
     };
 
-    // 触摸手势支持
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 1) {
         isDraggingRef.current = true;
@@ -404,30 +445,40 @@ export default function ClayGlobe({
     };
     window.addEventListener('resize', handleResize);
 
-    // 13. 动画主循环
+    // 10. 定格动画 12FPS 步进动画主循环 (Stop-Motion Framerate Stepping)
     let reqId = 0;
     const clock = new THREE.Clock();
+    let stopMotionAccum = 0;
+    const stopMotionInterval = 1 / 14; // 约 14 帧/秒 定格质感
 
     const animate = () => {
       const delta = clock.getDelta();
       const now = performance.now();
+      stopMotionAccum += delta;
 
-      // 目标点位平滑插值旋转对准相机
+      // 目标点位平滑插值旋转
       if (isTargetingRef.current && targetQuaternionRef.current && globeGroupRef.current) {
-        globeGroupRef.current.quaternion.slerp(targetQuaternionRef.current, Math.min(1, delta * 4.2));
+        globeGroupRef.current.quaternion.slerp(targetQuaternionRef.current, Math.min(1, delta * 4.5));
         if (globeGroupRef.current.quaternion.angleTo(targetQuaternionRef.current) < 0.01) {
           isTargetingRef.current = false;
         }
       } else if (!isDraggingRef.current && globeGroupRef.current) {
-        // 轻柔定格自转
-        const slowSpin = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), delta * 0.035);
-        globeGroupRef.current.quaternion.premultiply(slowSpin);
+        // 定格动画抽帧旋转节奏（模拟逐帧拍摄微动）
+        if (stopMotionAccum >= stopMotionInterval) {
+          stopMotionAccum = 0;
+          const frameStep = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.0035);
+          globeGroupRef.current.quaternion.premultiply(frameStep);
+        }
       }
 
-      // 微云缓慢公转
-      satellitesGroup.rotation.y -= delta * 0.05;
+      // B612 小行星轻柔公转与自转
+      b612Group.rotation.y += delta * 0.08;
+      b612.rotation.y += delta * 0.2;
 
-      // 新落图钉的物理下落与回弹动画（定格泥塑入土震荡）
+      // 定格微云飘动
+      cloudsGroup.rotation.y -= delta * 0.04;
+
+      // 新落图钉的物理下落与回弹动画
       if (dropAnimRef.current) {
         const { startTime, pinGroup, rippleMesh } = dropAnimRef.current;
         const elapsed = (now - startTime) / 1000;
@@ -435,21 +486,16 @@ export default function ClayGlobe({
         if (pinGroup) {
           const earthR = 2.0;
           if (elapsed < 0.9) {
-            // 定格弹力函数：先从高空自由落体砸入，再剧烈回弹2次
             const bounce = Math.sin(elapsed * 16) * Math.exp(-elapsed * 5.0) * 0.45;
-            const dropAltitude = earthR + 0.05 + Math.max(0, bounce) + (elapsed < 0.22 ? (0.22 - elapsed) * 2.5 : 0);
-            
-            // 沿自身法线更新高度
+            const dropAltitude = earthR + 0.06 + Math.max(0, bounce) + (elapsed < 0.22 ? (0.22 - elapsed) * 2.5 : 0);
             const dir = pinGroup.position.clone().normalize();
             pinGroup.position.copy(dir.multiplyScalar(dropAltitude));
           } else {
-            // 恢复稳态高度
             const dir = pinGroup.position.clone().normalize();
-            pinGroup.position.copy(dir.multiplyScalar(earthR + 0.05));
+            pinGroup.position.copy(dir.multiplyScalar(earthR + 0.06));
           }
         }
 
-        // 地面泥土震荡光圈扩展
         if (rippleMesh) {
           if (elapsed < 1.4) {
             const scale = 1.0 + elapsed * 2.8;
@@ -485,19 +531,18 @@ export default function ClayGlobe({
 
       earthGeom.dispose();
       earthMat.dispose();
-      wireGeom.dispose();
-      wireMat.dispose();
+      clayAlbedo.dispose();
+      clayNormal.dispose();
       renderer.dispose();
     };
   }, [onSelectPin]);
 
-  // 14. 核心：动态生成 3D 泥塑图钉 Mesh，并为新落钉挂载跳跃回弹动效与手绘撕纸旗标
+  // 11. 动态生成 3D 泥塑图钉 Mesh
   useEffect(() => {
     const pinsGroup = pinsGroupRef.current;
     const ripplesGroup = ripplesGroupRef.current;
     if (!pinsGroup || !ripplesGroup) return;
 
-    // 清理旧 Mesh
     while (pinsGroup.children.length > 0) {
       const obj = pinsGroup.children[0] as THREE.Group;
       obj.traverse((child) => {
@@ -516,7 +561,7 @@ export default function ClayGlobe({
 
     pins.forEach((pin, index) => {
       const isNewDrop = pin.id === newlyDroppedPinId;
-      const pinPos = latLonToVector3(pin.lat, pin.lon, earthRadius + 0.05);
+      const pinPos = latLonToVector3(pin.lat, pin.lon, earthRadius + 0.06);
 
       const pinGroup = new THREE.Group();
       pinGroup.position.copy(pinPos);
@@ -524,66 +569,65 @@ export default function ClayGlobe({
       pinGroup.userData.pinData = pin;
 
       const isTeacher = pin.role === 'TEACHER';
-      const headColor = isTeacher ? 0xE27D60 : (index % 2 === 0 ? 0xC38D9E : 0xFFDE59);
+      // 真实软陶色号：红陶色、鼠尾草绿陶色、芥末黄泥色
+      const headColor = isTeacher ? 0xD47A6A : (index % 2 === 0 ? 0xC38D9E : 0xE6B84A);
 
-      // (1) 泥塑球头（定格手工质感）
-      const headGeom = new THREE.SphereGeometry(0.095, 18, 18);
+      // (1) 手捏泥塑球头（带微凹凸软陶手捏感）
+      const headGeom = new THREE.DodecahedronGeometry(0.105, 2);
       const headMat = new THREE.MeshStandardMaterial({
         color: headColor,
-        roughness: 0.8,
-        metalness: 0.08,
+        roughness: 0.82,
+        metalness: 0.05,
       });
       const headMesh = new THREE.Mesh(headGeom, headMat);
-      headMesh.position.set(0, 0, 0.13);
+      headMesh.position.set(0, 0, 0.15);
       headMesh.userData.pinData = pin;
       pinGroup.add(headMesh);
 
-      // (2) 针身
-      const needleGeom = new THREE.CylinderGeometry(0.016, 0.006, 0.15, 8);
+      // (2) 竹签 / 金属牙签细针身
+      const needleGeom = new THREE.CylinderGeometry(0.016, 0.006, 0.16, 8);
       const needleMat = new THREE.MeshStandardMaterial({
-        color: 0x1A3320,
-        roughness: 0.65,
-        metalness: 0.35,
+        color: 0x4A3525, // 细竹木棕色
+        roughness: 0.75,
+        metalness: 0.15,
       });
       const needleMesh = new THREE.Mesh(needleGeom, needleMat);
       needleMesh.rotation.x = Math.PI / 2;
-      needleMesh.position.set(0, 0, 0.06);
+      needleMesh.position.set(0, 0, 0.07);
       needleMesh.userData.pinData = pin;
       pinGroup.add(needleMesh);
 
-      // (3) 底座泥土落坑微环
-      const baseRingGeom = new THREE.RingGeometry(0.035, 0.12, 16);
-      const baseRingMat = new THREE.MeshBasicMaterial({
-        color: 0x1A3320,
-        transparent: true,
-        opacity: 0.32,
-        side: THREE.DoubleSide,
+      // (3) 底座橡皮泥小团底托
+      const baseBlobGeom = new THREE.SphereGeometry(0.05, 12, 12);
+      const baseBlobMat = new THREE.MeshStandardMaterial({
+        color: 0x7FA389,
+        roughness: 0.9,
       });
-      const baseRing = new THREE.Mesh(baseRingGeom, baseRingMat);
-      pinGroup.add(baseRing);
+      const baseBlob = new THREE.Mesh(baseBlobGeom, baseBlobMat);
+      baseBlob.scale.set(1.4, 1.4, 0.5);
+      pinGroup.add(baseBlob);
 
-      // (4) 3D 手绘浮动纸质旗标牌（始终悬浮在图钉上方）
+      // (4) 3D 手绘撕纸旗标牌
       const labelTexture = createPinLabelTexture(pin.city, pin.name, isTeacher);
       const labelMat = new THREE.SpriteMaterial({
         map: labelTexture,
         transparent: true,
       });
       const labelSprite = new THREE.Sprite(labelMat);
-      labelSprite.scale.set(0.65, 0.22, 1);
-      labelSprite.position.set(0, 0.18, 0.18);
+      labelSprite.scale.set(0.72, 0.24, 1);
+      labelSprite.position.set(0, 0.20, 0.20);
       labelSprite.userData.pinData = pin;
       pinGroup.add(labelSprite);
 
       pinsGroup.add(pinGroup);
 
-      // (5) 如果是刚刚新增的图钉，为其绑定专属震荡波与掉落物理动画
+      // (5) 为新图钉绑定震荡波
       if (isNewDrop) {
-        // 创建震荡涟漪环
-        const rippleGeom = new THREE.RingGeometry(0.08, 0.16, 32);
+        const rippleGeom = new THREE.RingGeometry(0.08, 0.18, 32);
         const rippleMat = new THREE.MeshBasicMaterial({
-          color: 0xFFDE59,
+          color: 0xE6B84A,
           transparent: true,
-          opacity: 0.7,
+          opacity: 0.75,
           side: THREE.DoubleSide,
         });
         const rippleMesh = new THREE.Mesh(rippleGeom, rippleMat);
@@ -591,7 +635,6 @@ export default function ClayGlobe({
         rippleMesh.lookAt(pinPos.clone().multiplyScalar(2));
         ripplesGroup.add(rippleMesh);
 
-        // 启动动画调度
         dropAnimRef.current = {
           pinId: pin.id,
           startTime: performance.now(),
@@ -604,7 +647,6 @@ export default function ClayGlobe({
 
   return (
     <div className="relative w-full h-full overflow-hidden select-none">
-      {/* Three.js 挂载节点 */}
       <div 
         ref={mountRef} 
         className="w-full h-full cursor-grab active:cursor-grabbing" 
@@ -614,23 +656,24 @@ export default function ClayGlobe({
       {hoveredPin && (
         <div
           className="absolute z-30 pointer-events-none transform -translate-x-1/2 -translate-y-full mb-3"
-          style={{ left: `${hoveredPin.x}px`, top: `${hoveredPin.y - 12}px` }}
+          style={{ left: `${hoveredPin.x}px`, top: `${hoveredPin.y - 14}px` }}
         >
-          <div className="bg-[#FAF7EE] text-[#1A3320] text-xs px-3.5 py-2 rounded hand-drawn-border hand-drawn-box flex items-center gap-2 whitespace-nowrap shadow-xl">
-            <span className="text-base">📍</span>
+          <div className="clay-card px-4 py-2.5 flex items-center gap-2.5 whitespace-nowrap shadow-2xl">
+            <span className="text-xl">📍</span>
             <div>
-              <div className="font-bold text-sm text-[#1A3320]">{hoveredPin.pin.city}</div>
-              <div className="text-[#52796F] text-[11px]">{hoveredPin.pin.name}</div>
+              <div className="font-bold text-sm text-[#1E3824]">{hoveredPin.pin.city}</div>
+              <div className="text-[#52796F] text-xs font-serif">{hoveredPin.pin.name}</div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 底部交互指引小徽章 */}
-      <div className="absolute bottom-4 left-6 z-20 pointer-events-none flex items-center gap-2 text-xs text-[#52796F] bg-[#FAF7EE]/90 px-3 py-1.5 rounded-full hand-drawn-border hand-drawn-box-sm">
-        <span>🖐️ 鼠标拖拽地球全景</span>
+      {/* 底部黏土印章互动指引徽章 */}
+      <div className="absolute bottom-5 left-6 z-20 pointer-events-none flex items-center gap-2 clay-card px-3.5 py-1.5 text-xs text-[#52796F]">
+        <span className="text-sm">🖐️</span>
+        <span className="font-bold text-[#1E3824]">拖拽旋转软陶泥星球</span>
         <span>·</span>
-        <span>📍 轻触图钉翻阅课题手记</span>
+        <span>📍 轻触图钉翻阅手记</span>
       </div>
     </div>
   );

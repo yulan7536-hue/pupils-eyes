@@ -24,20 +24,26 @@ export default function PaperDetailModal({ pin, onClose, onNavigateToGallery }: 
     onClose();
   };
 
+  const isTeacher = pin.role === 'TEACHER';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1A3320]/45 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#162B1C]/50 backdrop-blur-[3px] select-none">
       <div 
-        className="relative w-full max-w-lg parchment-sheet p-6 hand-drawn-border hand-drawn-box text-[#1A3320] rotate-[-0.5deg] animate-in fade-in zoom-in-95 duration-200"
+        className="relative w-full max-w-lg clay-card p-6 md:p-8 text-[#1E3824] animate-in fade-in zoom-in-95 duration-150"
       >
-        {/* 和纸胶带修饰 */}
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-0.5 bg-[#FAF3D1] border border-[#1A3320] text-[#1A3320] text-xs font-bold rotate-1 shadow-sm">
-          🍃 童眼观察站 · 空间档案
+        {/* 顶部手捏软陶胶带 */}
+        <div 
+          className={`absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 border-2 border-[#1E3824] text-xs font-black rounded-full shadow-xs -rotate-1 ${
+            isTeacher ? 'bg-[#D47A6A] text-[#FAF5E8]' : 'bg-[#6E9277] text-[#FAF5E8]'
+          }`}
+        >
+          🍃 童眼观察站 · 定格陶土档案
         </div>
 
         {/* 关闭按钮 */}
         <button 
           onClick={handleClose}
-          className="absolute top-4 right-4 text-[#1A3320] hover:scale-110 p-1 transition-transform"
+          className="absolute top-4 right-4 text-[#1E3824] hover:scale-110 p-1.5 rounded-full hover:bg-[#EAEFE6] transition-transform"
           aria-label="关闭详情"
         >
           <X size={20} />
@@ -45,8 +51,8 @@ export default function PaperDetailModal({ pin, onClose, onNavigateToGallery }: 
 
         <div className="mt-3 space-y-4">
           {/* 地点与学校 */}
-          <div className="flex items-center gap-2 text-xs text-[#52796F] font-semibold border-b border-[#1A3320]/15 pb-2">
-            <MapPin size={14} className="text-[#85A98F]" />
+          <div className="flex items-center gap-2 text-xs text-[#52796F] font-black border-b-2 border-[#1E3824]/15 pb-2.5">
+            <MapPin size={15} className="text-[#6E9277]" />
             <span>{pin.city}</span>
             <span>·</span>
             <span>{pin.school}</span>
@@ -54,23 +60,27 @@ export default function PaperDetailModal({ pin, onClose, onNavigateToGallery }: 
 
           {/* 标题与身份 */}
           <div className="flex items-start justify-between gap-3">
-            <h3 className="text-xl font-bold tracking-wide leading-snug">
+            <h3 className="text-xl md:text-2xl font-black tracking-wide leading-snug font-serif">
               {pin.name}
             </h3>
-            <span className="shrink-0 px-2.5 py-1 bg-[#F3F7F0] border border-[#1A3320] text-xs font-bold rounded">
-              {pin.role === 'TEACHER' ? '👨‍🏫 教师教研' : '👧 学生观察'}
+            <span 
+              className={`shrink-0 px-3 py-1 border-2 border-[#1E3824] text-xs font-black rounded-full shadow-xs ${
+                isTeacher ? 'bg-[#D47A6A] text-[#FAF5E8]' : 'bg-[#6E9277] text-[#FAF5E8]'
+              }`}
+            >
+              {isTeacher ? '👨‍🏫 教师教研' : '👧 学生观察'}
             </span>
           </div>
 
           {/* 故事与内容摘录 */}
-          <div className="p-4 bg-[#F3F7F0] hand-drawn-border-sm text-sm leading-relaxed text-[#1A3320]/90 relative">
-            <span className="text-2xl text-[#85A98F] absolute top-1 left-2 font-serif select-none">“</span>
-            <p className="pl-4 italic font-serif">{pin.desc}</p>
-            <span className="text-2xl text-[#85A98F] float-right font-serif select-none">”</span>
+          <div className="p-4 bg-[#EAEFE6] rounded-xl border-2 border-[#1E3824]/30 text-xs md:text-sm leading-relaxed text-[#1E3824]/90 relative font-serif">
+            <span className="text-2xl text-[#6E9277] absolute top-1 left-2 font-serif select-none">“</span>
+            <p className="pl-4 italic">{pin.desc}</p>
+            <span className="text-2xl text-[#6E9277] float-right font-serif select-none">”</span>
           </div>
 
           {/* 附加元信息 */}
-          <div className="grid grid-cols-2 gap-2 text-xs text-[#52796F] pt-1">
+          <div className="grid grid-cols-2 gap-2 text-xs text-[#52796F] font-bold pt-1">
             <div className="flex items-center gap-1.5">
               <User size={13} />
               <span>作者：{pin.author || '童眼自然探索者'}</span>
@@ -82,18 +92,18 @@ export default function PaperDetailModal({ pin, onClose, onNavigateToGallery }: 
           </div>
 
           {/* 底部操作 */}
-          <div className="flex items-center justify-between pt-3 border-t border-[#1A3320]/15">
-            <span className="text-xs text-[#52796F] flex items-center gap-1">
-              <Sparkles size={12} className="text-[#FFDE59]" />
-              已插钉至 3D 泥塑星球
+          <div className="flex items-center justify-between pt-3.5 border-t-2 border-[#1E3824]/15">
+            <span className="text-xs text-[#52796F] font-bold flex items-center gap-1.5">
+              <Sparkles size={14} className="text-[#E6B84A]" />
+              已定格在 3D 软陶星体表面
             </span>
 
             <button
               onClick={handleGoGallery}
-              className="px-4 py-2 bg-[#85A98F] hover:bg-[#52796F] text-[#FAF7EE] text-xs font-bold rounded-full hand-drawn-border hand-drawn-box-sm flex items-center gap-1.5 transition-all"
+              className="clay-btn px-4 py-2 text-xs font-black flex items-center gap-1.5"
             >
-              <BookOpen size={13} />
-              <span>翻阅作品画卷</span>
+              <BookOpen size={14} />
+              <span>翻阅画卷手记</span>
               <ExternalLink size={12} />
             </button>
           </div>
