@@ -1,226 +1,281 @@
 import * as THREE from 'three';
 
 /**
- * 纯代码程序化生成定格动画（Stop-Motion / Claymation）手捏黏土纹理
- * 包括：手搓陶土底色、指纹按压纹路 (Fingerprints) 以及起伏法线贴图
+ * 纯代码生成的黏土贴图。
+ * 1) 地球底色：把简化大陆画进等距圆柱投影，再压上揉泥与纸浆颗粒；大陆边缘留一圈"捏出来"的浅边。
+ * 2) 法线：低频噪声起伏，模拟手指按压的软陶表面。
+ * 色调全部落在莫兰迪区间（灰绿海、灰苔陆地、浅土黄高地）。
  */
 
-// 1. 生成带有大理石揉泥纹理与颗粒感的黏土漫反射贴图 (Albedo Map)
-export function createClayAlbedoTexture(width = 1024, height = 512): THREE.CanvasTexture {
+const OCEAN = '#63a6d2';
+const OCEAN_DEEP = '#5194c4';
+const LAND = '#6cae4d';
+const LAND_DEEP = '#569140';
+const LAND_LIT = '#86c165';
+const OCHRE = '#cbb073';
+const ICE = '#eff2e4';
+
+/** 经纬度 → 等距圆柱像素 */
+const px = (lon: number, w: number) => ((lon + 180) / 360) * w;
+const py = (lat: number, h: number) => ((90 - lat) / 180) * h;
+
+type Poly = [number, number][];
+
+const CONTINENTS: { pts: Poly; color: string }[] = [
+  {
+    // 欧亚大陆（粗形，只求可辨）
+    color: LAND,
+    pts: [
+      [-9, 43], [0, 51], [8, 57], [20, 60], [30, 62], [42, 60], [60, 62], [78, 60],
+      [95, 58], [110, 56], [125, 52], [140, 50], [148, 44], [140, 38], [126, 34],
+      [121, 26], [110, 20], [104, 10], [100, 4], [96, 12], [88, 21], [80, 12],
+      [73, 20], [66, 25], [57, 28], [48, 30], [42, 33], [36, 36], [28, 36],
+      [22, 33], [14, 38], [4, 43], [-4, 43],
+    ],
+  },
+  {
+    // 非洲
+    color: LAND,
+    pts: [
+      [-17, 20], [-5, 32], [10, 34], [24, 32], [33, 30], [42, 12], [40, -2],
+      [35, -18], [26, -33], [18, -34], [12, -18], [9, 0], [2, 5], [-8, 5], [-16, 12],
+    ],
+  },
+  {
+    // 北美
+    color: LAND,
+    pts: [
+      [-166, 66], [-140, 70], [-110, 71], [-85, 66], [-62, 60], [-56, 48],
+      [-70, 44], [-82, 30], [-97, 19], [-105, 24], [-118, 32], [-126, 44],
+      [-136, 58], [-152, 60],
+    ],
+  },
+  {
+    // 南美
+    color: LAND_DEEP,
+    pts: [
+      [-81, 9], [-62, 11], [-48, 0], [-35, -6], [-38, -22], [-52, -32],
+      [-68, -48], [-75, -38], [-72, -18], [-79, 0],
+    ],
+  },
+  {
+    // 澳洲
+    color: LAND_LIT,
+    pts: [
+      [113, -22], [129, -12], [143, -14], [153, -27], [146, -38], [131, -32], [116, -34],
+    ],
+  },
+  {
+    // 格陵兰
+    color: LAND_LIT,
+    pts: [
+      [-45, 80], [-22, 81], [-24, 68], [-46, 62], [-58, 72],
+    ],
+  },
+  {
+    // 青藏高原（浅土黄，给中国区域一个视觉落点）
+    color: OCHRE,
+    pts: [
+      [74, 38], [86, 40], [100, 38], [102, 30], [94, 26], [80, 28], [74, 32],
+    ],
+  },
+  {
+    // 撒哈拉
+    color: OCHRE,
+    pts: [
+      [16, 26], [30, 28], [36, 20], [30, 14], [18, 16],
+    ],
+  },
+];
+
+/**
+ * 把多边形画成圆角曲线：每个顶点替换成「前一条边的中点 → 顶点 → 后一条边的中点」
+ * 的二次曲线。黏土里的大陆没有直角，这一步决定了它是"泥块"还是"多边形"。
+ */
+function polyPath(ctx: CanvasRenderingContext2D, pts: Poly, w: number, h: number) {
+  const P = pts.map(([lon, lat]) => [px(lon, w), py(lat, h)] as [number, number]);
+  const n = P.length;
+  const mid = (a: [number, number], b: [number, number]): [number, number] => [
+    (a[0] + b[0]) / 2,
+    (a[1] + b[1]) / 2,
+  ];
+  ctx.beginPath();
+  const start = mid(P[n - 1], P[0]);
+  ctx.moveTo(start[0], start[1]);
+  for (let i = 0; i < n; i++) {
+    const cur = P[i];
+    const m = mid(cur, P[(i + 1) % n]);
+    ctx.quadraticCurveTo(cur[0], cur[1], m[0], m[1]);
+  }
+  ctx.closePath();
+}
+
+export function createClayEarthTexture(width = 2048, height = 1024): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
 
   if (ctx) {
-    // 基础亮翡翠抹茶陶土地色（明亮、温润玉瓷陶质感）
-    ctx.fillStyle = '#78A885';
+    // 海：两块蓝揉在一起
+    ctx.fillStyle = OCEAN;
     ctx.fillRect(0, 0, width, height);
-
-    // 揉入浅色软陶泥条纹（模拟两块不同深浅黏土揉捏在一起的效果）
-    for (let i = 0; i < 45; i++) {
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(215, 240, 222, 0.38)' : 'rgba(92, 148, 110, 0.28)';
+    ctx.fillStyle = OCEAN_DEEP;
+    for (let i = 0; i < 22; i++) {
       ctx.beginPath();
-      const sx = Math.random() * width;
-      const sy = Math.random() * height;
-      const r = 25 + Math.random() * 90;
-      ctx.ellipse(sx, sy, r * 2.2, r * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
+      ctx.ellipse(
+        Math.random() * width,
+        Math.random() * height,
+        90 + Math.random() * 260,
+        60 + Math.random() * 170,
+        Math.random() * Math.PI,
+        0,
+        Math.PI * 2
+      );
       ctx.fill();
     }
 
-    // 手工纸浆与微小纤维杂色点
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
-    for (let i = 0; i < 800; i++) {
-      const px = Math.random() * width;
-      const py = Math.random() * height;
-      ctx.fillRect(px, py, 1.5, 1.5);
+    // 极冰：北极直接盖，南极用垂直渐变随球面渐隐，避免在球底形成硬边椭圆污渍
+    ctx.fillStyle = ICE;
+    ctx.fillRect(0, 0, width, py(82, height));
+
+    const southTop = py(-64, height); // 渐变起点（较北、更靠近赤道）
+    const southBottom = height; // 球底
+    const southGrad = ctx.createLinearGradient(0, southTop, 0, southBottom);
+    southGrad.addColorStop(0, 'rgba(239, 242, 228, 0)');
+    southGrad.addColorStop(0.35, 'rgba(239, 242, 228, 0.55)');
+    southGrad.addColorStop(1, 'rgba(239, 242, 228, 0.95)');
+    ctx.fillStyle = southGrad;
+    ctx.fillRect(0, southTop, width, southBottom - southTop);
+
+    // 大陆：先描一圈浅色"捏边"，再压上本体的泥色
+    CONTINENTS.forEach(({ pts, color }) => {
+      ctx.save();
+      ctx.translate(5, 6);
+      polyPath(ctx, pts, width, height);
+      ctx.fillStyle = 'rgba(58, 82, 52, 0.4)';
+      ctx.fill();
+      ctx.restore();
+
+      polyPath(ctx, pts, width, height);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      // 泥块内部的明暗：压一块受光的泥、再压一块背光的泥
+      ctx.save();
+      polyPath(ctx, pts, width, height);
+      ctx.clip();
+      ctx.globalAlpha = 0.34;
+      ctx.fillStyle = LAND_LIT;
+      const b = pts.reduce(
+        (acc, [lon, lat]) => {
+          acc.minLon = Math.min(acc.minLon, lon);
+          acc.maxLon = Math.max(acc.maxLon, lon);
+          acc.minLat = Math.min(acc.minLat, lat);
+          acc.maxLat = Math.max(acc.maxLat, lat);
+          return acc;
+        },
+        { minLon: 180, maxLon: -180, minLat: 90, maxLat: -90 }
+      );
+      const cx = px((b.minLon + b.maxLon) / 2, width);
+      const cy = py((b.minLat + b.maxLat) / 2, height);
+      const rw = (px(b.maxLon, width) - px(b.minLon, width)) * 0.5;
+      const rh = (py(b.minLat, height) - py(b.maxLat, height)) * 0.5;
+      ctx.beginPath();
+      ctx.ellipse(cx - rw * 0.28, cy - rh * 0.34, rw * 0.8, rh * 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.26;
+      ctx.fillStyle = LAND_DEEP;
+      ctx.beginPath();
+      ctx.ellipse(cx + rw * 0.34, cy + rh * 0.42, rw * 0.9, rh * 0.72, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+
+    // 揉泥条纹：极淡，只留一点被抹过的痕迹
+    for (let i = 0; i < 60; i++) {
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(232, 240, 226, 0.045)' : 'rgba(84, 104, 86, 0.045)';
+      ctx.beginPath();
+      ctx.ellipse(
+        Math.random() * width,
+        Math.random() * height,
+        20 + Math.random() * 70,
+        8 + Math.random() * 22,
+        Math.random() * Math.PI,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    }
+
+    // 纸浆颗粒
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+    for (let i = 0; i < 2600; i++) {
+      ctx.fillRect(Math.random() * width, Math.random() * height, 2, 2);
+    }
+    ctx.fillStyle = 'rgba(70, 84, 70, 0.1)';
+    for (let i = 0; i < 1800; i++) {
+      ctx.fillRect(Math.random() * width, Math.random() * height, 2.4, 2.4);
     }
   }
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.anisotropy = 4;
   return texture;
 }
 
-// 2. 生成手指指纹 (Fingerprints) 与按压凹凸法线贴图 (Normal Map)
-export function createClayNormalTexture(width = 512, height = 512): THREE.CanvasTexture {
+/** 低频噪声法线：软陶表面被指腹压出的起伏 */
+export function createClayNormalTexture(size = 512): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = size;
+  canvas.height = size;
   const ctx = canvas.getContext('2d');
 
   if (ctx) {
-    // 法线贴图基准平面色 (RGB: 128, 128, 255)
-    ctx.fillStyle = '#8080FF';
-    ctx.fillRect(0, 0, width, height);
-
-    // 随机绘制多个手捏指纹螺旋圈 (Fingerprint Whorls)
-    const drawFingerprint = (cx: number, cy: number, radius: number) => {
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate((Math.random() - 0.5) * Math.PI);
-
-      const rings = Math.floor(radius / 7);
-      for (let r = 5; r < radius; r += 7) {
-        ctx.strokeStyle = (r % 14 === 0) ? 'rgba(160, 100, 255, 0.45)' : 'rgba(96, 155, 255, 0.45)';
-        ctx.lineWidth = 3.5;
-        ctx.beginPath();
-        // 稍带椭圆和波动的指纹圈
-        for (let a = 0; a <= Math.PI * 2; a += 0.2) {
-          const wobble = Math.sin(a * 5) * 1.5;
-          const px = Math.cos(a) * (r * 1.4 + wobble);
-          const py = Math.sin(a) * (r * 0.9 + wobble);
-          if (a === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
+    const field = new Float32Array(size * size);
+    const waves = [
+      { f: 3.1, a: 0.5, p: 0.7 },
+      { f: 7.3, a: 0.28, p: 2.1 },
+      { f: 15.7, a: 0.14, p: 4.3 },
+      { f: 31.1, a: 0.07, p: 1.2 },
+    ];
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        let v = 0;
+        for (const w of waves) {
+          v +=
+            w.a *
+            Math.sin((x / size) * Math.PI * 2 * w.f + w.p) *
+            Math.cos((y / size) * Math.PI * 2 * w.f * 0.87 + w.p * 1.7);
         }
-        ctx.closePath();
-        ctx.stroke();
+        field[y * size + x] = v;
       }
-      ctx.restore();
-    };
-
-    // 分布多个手捏按压处
-    drawFingerprint(120, 140, 80);
-    drawFingerprint(380, 160, 95);
-    drawFingerprint(260, 360, 85);
-    drawFingerprint(430, 410, 75);
-    drawFingerprint(70, 420, 65);
-
-    // 黏土微小凹坑按压杂色 (Thumb indents)
-    for (let k = 0; k < 60; k++) {
-      const rx = Math.random() * width;
-      const ry = Math.random() * height;
-      const rad = 6 + Math.random() * 18;
-      const grad = ctx.createRadialGradient(rx, ry, 0, rx, ry, rad);
-      grad.addColorStop(0, 'rgba(100, 100, 255, 0.4)');
-      grad.addColorStop(1, 'rgba(128, 128, 255, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(rx, ry, rad, 0, Math.PI * 2);
-      ctx.fill();
     }
+
+    const img = ctx.createImageData(size, size);
+    const strength = 2.4;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = y * size + x;
+        const dx = field[y * size + ((x + 1) % size)] - field[y * size + ((x - 1 + size) % size)];
+        const dy = field[((y + 1) % size) * size + x] - field[((y - 1 + size) % size) * size + x];
+        const nx = -dx * strength;
+        const ny = -dy * strength;
+        const nz = 1;
+        const len = Math.hypot(nx, ny, nz);
+        img.data[i * 4] = ((nx / len) * 0.5 + 0.5) * 255;
+        img.data[i * 4 + 1] = ((ny / len) * 0.5 + 0.5) * 255;
+        img.data[i * 4 + 2] = ((nz / len) * 0.5 + 0.5) * 255;
+        img.data[i * 4 + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   return texture;
-}
-
-// 3. 构建手捏黏土小树 (Procedural Clay Tree Group)
-export function createClayTree(scale = 0.12): THREE.Group {
-  const treeGroup = new THREE.Group();
-
-  // 弯曲的棕色黏土树干 (用微变形的圆柱体拼接)
-  const trunkMat = new THREE.MeshStandardMaterial({
-    color: 0x5C3E29, // 烘焙陶土棕
-    roughness: 0.9,
-    metalness: 0.05,
-  });
-
-  const trunkGeom = new THREE.CylinderGeometry(0.18, 0.28, 1.2, 10);
-  const trunkMesh = new THREE.Mesh(trunkGeom, trunkMat);
-  trunkMesh.position.y = 0.6;
-  trunkMesh.rotation.z = (Math.random() - 0.5) * 0.12;
-  treeGroup.add(trunkMesh);
-
-  // 3 层叠捏的黏土树冠块 (一瓣一瓣捏出来的软陶球)
-  const leafMat = new THREE.MeshStandardMaterial({
-    color: 0x477051, // 深春草绿泥
-    roughness: 0.85,
-    metalness: 0.02,
-  });
-
-  const cluster1 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.65, 1), leafMat);
-  cluster1.position.set(0, 1.2, 0);
-  treeGroup.add(cluster1);
-
-  const cluster2 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.48, 1), leafMat);
-  cluster2.position.set(0.2, 1.6, 0.1);
-  treeGroup.add(cluster2);
-
-  const cluster3 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.35, 1), leafMat);
-  cluster3.position.set(-0.15, 1.85, -0.05);
-  treeGroup.add(cluster3);
-
-  treeGroup.scale.set(scale, scale, scale);
-  return treeGroup;
-}
-
-// 4. 构建手捏小山峦 (Clay Mountain Peak)
-export function createClayMountain(scale = 0.16): THREE.Group {
-  const mountainGroup = new THREE.Group();
-
-  const mountainMat = new THREE.MeshStandardMaterial({
-    color: 0x8C7A65, // 岩石黄泥
-    roughness: 0.92,
-    metalness: 0.04,
-  });
-
-  // 主峰与小侧峰
-  const peakGeom = new THREE.ConeGeometry(0.7, 1.1, 7);
-  const mainPeak = new THREE.Mesh(peakGeom, mountainMat);
-  mainPeak.position.y = 0.55;
-  mountainGroup.add(mainPeak);
-
-  const sidePeak = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.75, 6), mountainMat);
-  sidePeak.position.set(0.4, 0.35, 0.2);
-  mountainGroup.add(sidePeak);
-
-  // 山顶按压白泥雪顶 (Clay Snow Cap)
-  const snowMat = new THREE.MeshStandardMaterial({
-    color: 0xFAF7EE,
-    roughness: 0.8,
-  });
-  const snowCap = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.35, 7), snowMat);
-  snowCap.position.y = 0.95;
-  mountainGroup.add(snowCap);
-
-  mountainGroup.scale.set(scale, scale, scale);
-  return mountainGroup;
-}
-
-// 5. 构建手捏自然卫星月球 (Handcrafted Clay Moon)
-export function createClayMoon(): THREE.Group {
-  const moonGroup = new THREE.Group();
-
-  // 凹凸不平的坑洞月球主体
-  const bodyGeom = new THREE.DodecahedronGeometry(0.36, 2);
-  const pos = bodyGeom.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const vx = pos.getX(i);
-    const vy = pos.getY(i);
-    const vz = pos.getZ(i);
-    const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
-    const bump = Math.sin(vx * 7) * Math.cos(vy * 7) * 0.035;
-    pos.setXYZ(i, (vx / len) * (0.36 + bump), (vy / len) * (0.36 + bump), (vz / len) * (0.36 + bump));
-  }
-  bodyGeom.computeVertexNormals();
-
-  const moonMat = new THREE.MeshStandardMaterial({
-    color: 0xEAE2CF, // 暖燕麦白陶土
-    roughness: 0.88,
-    metalness: 0.04,
-  });
-  const bodyMesh = new THREE.Mesh(bodyGeom, moonMat);
-  moonGroup.add(bodyMesh);
-
-  // 几个浅凹月坑 (Crater indents)
-  const craterMat = new THREE.MeshStandardMaterial({
-    color: 0xD8CDBC,
-    roughness: 0.95,
-  });
-  const crater1 = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.02, 6, 12), craterMat);
-  crater1.position.set(0.18, 0.22, 0.18);
-  crater1.lookAt(crater1.position.clone().multiplyScalar(2));
-  moonGroup.add(crater1);
-
-  const crater2 = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.015, 6, 12), craterMat);
-  crater2.position.set(-0.2, 0.1, 0.22);
-  crater2.lookAt(crater2.position.clone().multiplyScalar(2));
-  moonGroup.add(crater2);
-
-  return moonGroup;
 }

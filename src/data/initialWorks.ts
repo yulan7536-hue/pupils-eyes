@@ -1,5 +1,4 @@
-import { GalleryItem } from '../components/GalleryWall';
-import { PinItem } from '../components/ClayGlobe';
+import type { PinItem, WorkItem } from '../types';
 
 export const INITIAL_PINS: PinItem[] = [
   {
@@ -64,7 +63,7 @@ export const INITIAL_PINS: PinItem[] = [
   }
 ];
 
-export const INITIAL_WORKS: GalleryItem[] = [
+export const INITIAL_WORKS: WorkItem[] = [
   {
     id: 'pin-1',
     region: '浙江省 · 湖州市 · 安吉县',
@@ -167,7 +166,7 @@ export const INITIAL_WORKS: GalleryItem[] = [
 const STORAGE_KEY_WORKS = 'tongyan_nature_works_v2';
 const STORAGE_KEY_PINS = 'tongyan_nature_pins_v2';
 
-export function loadSavedWorks(): GalleryItem[] {
+export function loadSavedWorks(): WorkItem[] {
   if (typeof window === 'undefined') return INITIAL_WORKS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_WORKS);
@@ -178,7 +177,7 @@ export function loadSavedWorks(): GalleryItem[] {
   return INITIAL_WORKS;
 }
 
-export function saveWorks(works: GalleryItem[]) {
+export function saveWorks(works: WorkItem[]) {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY_WORKS, JSON.stringify(works));

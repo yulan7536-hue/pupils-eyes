@@ -1,734 +1,485 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { createClayEarthTexture, createClayNormalTexture } from '../utils/clayTextures';
 import { storySound } from '../utils/sound';
-import {
-  createClayAlbedoTexture,
-  createClayNormalTexture,
-  createClayTree,
-  createClayMountain,
-  createClayMoon,
-} from '../utils/clayTextures';
-
-export interface PinItem {
-  id: string;
-  name: string;
-  city: string;
-  lat: number;
-  lon: number;
-  school: string;
-  desc: string;
-  author?: string;
-  role?: 'TEACHER' | 'STUDENT';
-  date?: string;
-}
+import GlobeFallback from './GlobeFallback';
+import type { PinItem } from '../types';
 
 interface ClayGlobeProps {
   pins: PinItem[];
+  /** 画布边长（px）。尺寸由外层根据视口算好后传入 */
+  size: number;
+  zoomed: boolean;
+  activeTargetCoord: { lat: number; lon: number } | null;
+  newlyDroppedPinId: string | null;
   onSelectPin: (pin: PinItem) => void;
-  selectedPin?: PinItem | null;
-  activeTargetCoord?: { lat: number; lon: number } | null;
-  newlyDroppedPinId?: string | null;
-  isZoomed?: boolean;
-  onToggleZoom?: () => void;
+  onHoverPin: (pin: PinItem | null, clientX: number, clientY: number) => void;
+  /** 落钉瞬间把新图钉的屏幕坐标抛出来，让"啪！"打在钉子上 */
+  onPinAnchor?: (at: { x: number; y: number } | null) => void;
+  onToggleZoom: () => void;
 }
 
-// 经纬度转换到 3D 球体局部坐标
+const R = 2;
+
+/** 经纬度 → 球面坐标 */
 function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180);
   const theta = (lon + 180) * (Math.PI / 180);
-  const x = -(radius * Math.sin(phi) * Math.cos(theta));
-  const z = radius * Math.sin(phi) * Math.sin(theta);
-  const y = radius * Math.cos(phi);
-  return new THREE.Vector3(x, y, z);
-}
-
-// 动态创建手绘撕纸图钉旗标
-function createPinLabelTexture(cityName: string, title: string, isTeacher: boolean): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 84;
-  const ctx = canvas.getContext('2d');
-
-  if (ctx) {
-    // 纯净温润宣纸色，无生硬黑线描边
-    ctx.fillStyle = '#FAF8F0';
-    ctx.beginPath();
-    ctx.roundRect(6, 6, 244, 72, 10);
-    ctx.fill();
-
-    // 顶部温润色块分类
-    ctx.fillStyle = isTeacher ? '#DE6D56' : '#327346';
-    ctx.fillRect(16, 6, 44, 6);
-
-    // 城市文字
-    ctx.fillStyle = '#122818';
-    ctx.font = 'bold 22px "Noto Serif SC", serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    const displayCity = cityName.split('·').pop() || cityName;
-    ctx.fillText(`📍 ${displayCity}`, 18, 36);
-
-    ctx.fillStyle = '#3B6647';
-    ctx.font = '500 15px "Noto Serif SC", serif';
-    const shortTitle = title.length > 9 ? title.slice(0, 9) + '...' : title;
-    ctx.fillText(shortTitle, 20, 60);
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  return new THREE.Vector3(
+    -radius * Math.sin(phi) * Math.cos(theta),
+    radius * Math.cos(phi),
+    radius * Math.sin(phi) * Math.sin(theta)
+  );
 }
 
 export default function ClayGlobe({
   pins,
-  onSelectPin,
-  selectedPin,
+  size,
+  zoomed,
   activeTargetCoord,
   newlyDroppedPinId,
-  isZoomed = false,
+  onSelectPin,
+  onHoverPin,
+  onPinAnchor,
   onToggleZoom,
 }: ClayGlobeProps) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const [hoveredPin, setHoveredPin] = useState<{ pin: PinItem; x: number; y: number } | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  // 内部引用以供动画和交互
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const globeGroupRef = useRef<THREE.Group | null>(null);
-  const pinsGroupRef = useRef<THREE.Group | null>(null);
-  const ripplesGroupRef = useRef<THREE.Group | null>(null);
-  const selectedPinRef = useRef<PinItem | null>(null);
-  const isZoomedRef = useRef<boolean>(isZoomed);
-  const onToggleZoomRef = useRef(onToggleZoom);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const globeRef = useRef<THREE.Group | null>(null);
+  const pinsRef = useRef<THREE.Group | null>(null);
+  const ripplesRef = useRef<THREE.Group | null>(null);
 
+  // 回调放进 ref，避免因为函数身份变化重建整个 WebGL 场景
+  const onSelectRef = useRef(onSelectPin);
+  const onHoverRef = useRef(onHoverPin);
+  const onAnchorRef = useRef(onPinAnchor);
+  const onZoomRef = useRef(onToggleZoom);
   useEffect(() => {
-    isZoomedRef.current = isZoomed;
-  }, [isZoomed]);
+    onSelectRef.current = onSelectPin;
+    onHoverRef.current = onHoverPin;
+    onAnchorRef.current = onPinAnchor;
+    onZoomRef.current = onToggleZoom;
+  }, [onSelectPin, onHoverPin, onPinAnchor, onToggleZoom]);
 
+  const zoomedRef = useRef(zoomed);
   useEffect(() => {
-    onToggleZoomRef.current = onToggleZoom;
-  }, [onToggleZoom]);
+    zoomedRef.current = zoomed;
+  }, [zoomed]);
 
-  // 同步选中的图钉引用用于相机推拉镜头动效（学习参考视频的聚焦拉近体验）
-  useEffect(() => {
-    selectedPinRef.current = selectedPin || null;
-  }, [selectedPin]);
+  const targetQuatRef = useRef<THREE.Quaternion | null>(null);
+  const targetingRef = useRef(false);
+  const dropRef = useRef<{ start: number; pin: THREE.Group; ripple: THREE.Mesh | null } | null>(null);
 
-  // 四元数目标平滑旋转
-  const targetQuaternionRef = useRef<THREE.Quaternion | null>(null);
-  const isTargetingRef = useRef<boolean>(false);
-  const isDraggingRef = useRef(false);
-  const prevMouseRef = useRef({ x: 0, y: 0 });
-
-  // 记录新落钉的动画时钟
-  const dropAnimRef = useRef<{
-    pinId: string;
-    startTime: number;
-    pinGroup: THREE.Group | null;
-    rippleMesh: THREE.Mesh | null;
-  } | null>(null);
-
-  // 响应外部新坐标：利用四元数把该点精准旋转对准摄像机视野正中心
-  useEffect(() => {
-    if (!activeTargetCoord || !globeGroupRef.current || !cameraRef.current) return;
-    const { lat, lon } = activeTargetCoord;
-
-    const localTarget = latLonToVector3(lat, lon, 1.0).normalize();
-    const desiredDir = new THREE.Vector3(0, 0.22, 1.0).normalize();
-
-    const targetQuat = new THREE.Quaternion().setFromUnitVectors(localTarget, desiredDir);
-    targetQuaternionRef.current = targetQuat;
-    isTargetingRef.current = true;
-
-    storySound.playPinDrop();
-  }, [activeTargetCoord]);
-
-  // 初始化 Three.js 场景
+  /* ---------------- 场景初始化（只做一次） ---------------- */
   useEffect(() => {
     const container = mountRef.current;
     if (!container) return;
 
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+    const side = size || 600;
 
     const scene = new THREE.Scene();
-    sceneRef.current = scene;
-
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    // 摄像机放置在正中央，确保地球完全显现在网页中央、无任何偏位与遮挡
-    camera.position.set(0, 0, 5.4);
-    camera.lookAt(0, 0, 0);
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+    // 取景把「弧顶」到「底座底」刚好收进画布，缩小后底座才能严丝合缝落在桌板上
+    const VIEW_Y = -0.27;
+    camera.position.set(0, VIEW_Y, 7.26);
+    camera.lookAt(0, VIEW_Y, 0);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true,
-      powerPreference: 'high-performance',
-    });
-    renderer.setSize(width, height);
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch {
+      // 这台机器没有 WebGL：退回 2D 黏土球，绝不能让整页白掉
+      setFailed(true);
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(side, side);
+    renderer.setClearAlpha(0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.32;
+    // 不用 ACES：它把黏土的泥色一律抬亮、去饱和，莫兰迪会变成灰白
+    renderer.toneMapping = THREE.NoToneMapping;
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // 1. 定格动画影棚明亮艺术灯光 RIG（纯净透亮 Key Light + 翡翠玉色漫射 Fill Light）
-    const ambientLight = new THREE.AmbientLight(0xfffdf5, 1.7);
-    scene.add(ambientLight);
+    // 影棚光：暖主光 + 灰绿补光 + 背后轮廓光。强度刻意压低，否则泥面会曝掉
+    scene.add(new THREE.AmbientLight(0xfffaf0, 1.02));
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2.9);
-    keyLight.position.set(4.5, 6.0, 4.2);
-    scene.add(keyLight);
+    const key = new THREE.DirectionalLight(0xfff6e6, 1.16);
+    key.position.set(4.2, 5.6, 5.2);
+    scene.add(key);
 
-    const fillLight = new THREE.DirectionalLight(0x9bd8ac, 1.3);
-    fillLight.position.set(-4.5, -2.5, -3.2);
-    scene.add(fillLight);
+    const fill = new THREE.DirectionalLight(0xd2e4d4, 0.62);
+    fill.position.set(-5, -1.6, -3.4);
+    scene.add(fill);
 
-    // 2. 地球总组
-    const globeGroup = new THREE.Group();
-    // 初始角度朝向中国区域（东经 105°，北纬 35°）
-    const initialTarget = latLonToVector3(35, 105, 1.0).normalize();
-    const initialDesired = new THREE.Vector3(0, 0.2, 1.0).normalize();
-    globeGroup.quaternion.setFromUnitVectors(initialTarget, initialDesired);
-    scene.add(globeGroup);
-    globeGroupRef.current = globeGroup;
+    const rim = new THREE.DirectionalLight(0xffffff, 0.34);
+    rim.position.set(-2.4, 3.2, -5);
+    scene.add(rim);
 
-    // 3. 核心：手捏黏土纹理地球主体 (Stop-Motion Clay Earth)
-    const earthRadius = 2.0;
-    const earthGeom = new THREE.SphereGeometry(earthRadius, 64, 64);
+    // 右下的暖反弹光，托住球的暗侧
+    const bounce = new THREE.DirectionalLight(0xffeedd, 0.3);
+    bounce.position.set(4.5, -3.2, 2.4);
+    scene.add(bounce);
 
-    // 手捏不规则变形（大拇指按压起伏）
-    const posAttr = earthGeom.attributes.position;
-    for (let i = 0; i < posAttr.count; i++) {
-      const vx = posAttr.getX(i);
-      const vy = posAttr.getY(i);
-      const vz = posAttr.getZ(i);
-      const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
-      // 复合手捏起伏
-      const thumbDents = Math.sin(vx * 3.5) * Math.cos(vy * 3.5) * 0.028 + Math.sin(vz * 6.0) * 0.015;
-      posAttr.setXYZ(i, (vx / len) * (earthRadius + thumbDents), (vy / len) * (earthRadius + thumbDents), (vz / len) * (earthRadius + thumbDents));
+    const globe = new THREE.Group();
+    // 初始把中国区域转向镜头（东经 105°，北纬 35°）
+    globe.quaternion.setFromUnitVectors(
+      latLonToVector3(35, 105, 1).normalize(),
+      new THREE.Vector3(0, 0.18, 1).normalize()
+    );
+    scene.add(globe);
+    globeRef.current = globe;
+
+    // —— 球体：手捏出来的不完全圆 ——
+    const geom = new THREE.SphereGeometry(R, 96, 96);
+    const pos = geom.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const z = pos.getZ(i);
+      const len = Math.hypot(x, y, z);
+      const dents = Math.sin(x * 3.4) * Math.cos(y * 3.4) * 0.022 + Math.sin(z * 5.6) * 0.012;
+      const k = (R + dents) / len;
+      pos.setXYZ(i, x * k, y * k, z * k);
     }
-    earthGeom.computeVertexNormals();
+    geom.computeVertexNormals();
 
-    // 注入手捏指纹法线与大理石抹茶软陶泥漫反射
-    const clayAlbedo = createClayAlbedoTexture(1024, 512);
-    const clayNormal = createClayNormalTexture(512, 512);
+    const albedo = createClayEarthTexture(2048, 1024);
+    const normal = createClayNormalTexture(512);
 
-    const earthMat = new THREE.MeshStandardMaterial({
-      map: clayAlbedo,
-      normalMap: clayNormal,
-      normalScale: new THREE.Vector2(0.85, 0.85),
-      roughness: 0.82,
+    const mat = new THREE.MeshStandardMaterial({
+      map: albedo,
+      normalMap: normal,
+      normalScale: new THREE.Vector2(0.7, 0.7),
+      roughness: 0.88,
       metalness: 0.02,
     });
-    const earthMesh = new THREE.Mesh(earthGeom, earthMat);
-    globeGroup.add(earthMesh);
+    globe.add(new THREE.Mesh(geom, mat));
 
-    // 4. 定格大陆板块厚切泥片 (Clay Cutout Continents)
-    // 中国区域厚切陶土块（明亮青瓷抹茶软陶泥）
-    const chinaCenter = latLonToVector3(35, 105, earthRadius + 0.03);
-    const chinaGroup = new THREE.Group();
-    chinaGroup.position.copy(chinaCenter);
-    chinaGroup.lookAt(chinaCenter.clone().multiplyScalar(2));
+    // —— 黄铜支架：一道半圆弧 + 立柱 + 圆盘底座（属于「桌子」，不能挂进会旋转的 globe 组） ——
+    const baseGroup = new THREE.Group();
+    scene.add(baseGroup);
 
-    // 厚泥片大陆边缘
-    const slabGeom = new THREE.CylinderGeometry(0.78, 0.82, 0.04, 32);
-    const slabMat = new THREE.MeshStandardMaterial({
-      color: 0xADD3AB, // 清亮温润青瓷玉色
-      roughness: 0.78,
-      metalness: 0.02,
+    const brassMat = new THREE.MeshStandardMaterial({
+      color: 0xc9a55f,
+      roughness: 0.42,
+      metalness: 0.55,
     });
-    const chinaSlab = new THREE.Mesh(slabGeom, slabMat);
-    chinaSlab.rotation.x = Math.PI / 2;
-    chinaGroup.add(chinaSlab);
-
-    // 金黄色温暖漫射光晕
-    const glowCircleGeom = new THREE.RingGeometry(0.76, 1.05, 32);
-    const glowCircleMat = new THREE.MeshBasicMaterial({
-      color: 0xF2C338,
-      transparent: true,
-      opacity: 0.38,
-      side: THREE.DoubleSide,
+    const brassDeep = new THREE.MeshStandardMaterial({
+      color: 0xa8833f,
+      roughness: 0.5,
+      metalness: 0.45,
     });
-    const glowCircle = new THREE.Mesh(glowCircleGeom, glowCircleMat);
-    chinaGroup.add(glowCircle);
 
-    globeGroup.add(chinaGroup);
+    // 弧：绕球一圈多一点，开口朝左下，像参考插画里那道抱住球的金色带
+    const arcGeom = new THREE.TorusGeometry(R + 0.24, 0.095, 16, 96, Math.PI * 1.02);
+    const arc = new THREE.Mesh(arcGeom, brassMat);
+    arc.rotation.z = -Math.PI * 0.5;
+    baseGroup.add(arc);
 
-    // 5. 球体上散落的手捏 3D 定格山峦与松树 (Procedural Mountains & Trees)
-    const landscapeGroup = new THREE.Group();
+    // 弧的落点处一个小铜箍，把弧和立柱接上
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.12, 16), brassDeep);
+    collar.position.y = -(R + 0.02);
+    baseGroup.add(collar);
 
-    // 在青藏高原与大理苍山位置种上手捏小山峰
-    const mountain1 = createClayMountain(0.22);
-    const posMount1 = latLonToVector3(32, 92, earthRadius + 0.02);
-    mountain1.position.copy(posMount1);
-    mountain1.lookAt(posMount1.clone().multiplyScalar(2));
-    mountain1.rotateX(Math.PI / 2);
-    landscapeGroup.add(mountain1);
+    // 立柱：从球的底部往下，接住底座
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.1, 0.62, 20), brassMat);
+    stem.position.y = -(R + 0.26);
+    baseGroup.add(stem);
 
-    const mountain2 = createClayMountain(0.18);
-    const posMount2 = latLonToVector3(26, 100, earthRadius + 0.02);
-    mountain2.position.copy(posMount2);
-    mountain2.lookAt(posMount2.clone().multiplyScalar(2));
-    mountain2.rotateX(Math.PI / 2);
-    landscapeGroup.add(mountain2);
+    // 圆盘底座：两层，上小下大，像被车出来的铜座
+    const discTop = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.56, 0.11, 40), brassMat);
+    discTop.position.y = -(R + 0.58);
+    baseGroup.add(discTop);
 
-    // 在安吉竹林、四川盆地种上手捏黏土树
-    const tree1 = createClayTree(0.16);
-    const posTree1 = latLonToVector3(30, 119, earthRadius + 0.02);
-    tree1.position.copy(posTree1);
-    tree1.lookAt(posTree1.clone().multiplyScalar(2));
-    tree1.rotateX(Math.PI / 2);
-    landscapeGroup.add(tree1);
+    const discBottom = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.7, 0.13, 40), brassDeep);
+    discBottom.position.y = -(R + 0.68);
+    baseGroup.add(discBottom);
 
-    const tree2 = createClayTree(0.14);
-    const posTree2 = latLonToVector3(29, 103, earthRadius + 0.02);
-    tree2.position.copy(posTree2);
-    tree2.lookAt(posTree2.clone().multiplyScalar(2));
-    tree2.rotateX(Math.PI / 2);
-    landscapeGroup.add(tree2);
-
-    globeGroup.add(landscapeGroup);
-
-    // 6. 环绕公转的手捏陶土月球伴星
-    const moonOrbitGroup = new THREE.Group();
-    const clayMoon = createClayMoon();
-    clayMoon.position.set(3.0, 0.6, -0.5);
-    moonOrbitGroup.add(clayMoon);
-    scene.add(moonOrbitGroup);
-
-    // 7. 定格手捏蓬松白泥小云团
-    const cloudsGroup = new THREE.Group();
-    for (let c = 0; c < 8; c++) {
-      const angle = (c / 8) * Math.PI * 2;
-      const dist = earthRadius + 0.52 + Math.sin(c * 3) * 0.15;
-      const cy = Math.cos(c * 2) * 0.85;
-
-      const cloudComposite = new THREE.Group();
-      const cloudMat = new THREE.MeshStandardMaterial({
-        color: 0xFAF5E8,
-        roughness: 0.95,
-      });
-
-      // 3 个手捏小泥球并排捏成一朵云
-      const b1 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.11, 1), cloudMat);
-      const b2 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.15, 1), cloudMat);
-      b2.position.set(0.12, 0.03, 0);
-      const b3 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.10, 1), cloudMat);
-      b3.position.set(0.24, -0.02, 0);
-      cloudComposite.add(b1, b2, b3);
-
-      cloudComposite.position.set(Math.cos(angle) * dist, cy, Math.sin(angle) * dist);
-      cloudComposite.scale.set(0.9, 0.9, 0.9);
-      cloudsGroup.add(cloudComposite);
-    }
-    globeGroup.add(cloudsGroup);
-
-    // 8. 图钉与震荡波总组
     const pinsGroup = new THREE.Group();
-    globeGroup.add(pinsGroup);
-    pinsGroupRef.current = pinsGroup;
+    globe.add(pinsGroup);
+    pinsRef.current = pinsGroup;
 
-    const ripplesGroup = new THREE.Group();
-    globeGroup.add(ripplesGroup);
-    ripplesGroupRef.current = ripplesGroup;
+    const ripples = new THREE.Group();
+    globe.add(ripples);
+    ripplesRef.current = ripples;
 
-    // 9. 鼠标与触摸交互
-    const handleMouseDown = (e: MouseEvent) => {
-      isDraggingRef.current = true;
-      isTargetingRef.current = false;
-      prevMouseRef.current = { x: e.clientX, y: e.clientY };
+    /* ---------------- 交互 ---------------- */
+    const canvas = renderer.domElement;
+    let dragging = false;
+    let moved = 0;
+    let prev = { x: 0, y: 0 };
+    let hovering: PinItem | null = null;
+
+    const toNdc = (e: PointerEvent) => {
+      const r = canvas.getBoundingClientRect();
+      return new THREE.Vector2(
+        ((e.clientX - r.left) / r.width) * 2 - 1,
+        -((e.clientY - r.top) / r.height) * 2 + 1
+      );
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
+    const pickPin = (e: PointerEvent): PinItem | null => {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(toNdc(e), camera);
+      const hits = ray.intersectObjects(pinsGroup.children, true);
+      if (!hits.length) return null;
+      let obj: THREE.Object3D | null = hits[0].object;
+      while (obj && !obj.userData.pin && obj !== pinsGroup) obj = obj.parent;
+      return (obj?.userData.pin as PinItem) ?? null;
+    };
 
-      if (isDraggingRef.current && globeGroupRef.current) {
-        const deltaX = e.clientX - prevMouseRef.current.x;
-        const deltaY = e.clientY - prevMouseRef.current.y;
+    const onPointerDown = (e: PointerEvent) => {
+      dragging = true;
+      moved = 0;
+      prev = { x: e.clientX, y: e.clientY };
+      targetingRef.current = false;
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {
+        /* 合成事件没有真实 pointerId，捕获失败不影响拖动 */
+      }
+    };
 
-        const rotY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), deltaX * 0.006);
-        const rotX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), deltaY * 0.006);
-        globeGroupRef.current.quaternion.premultiply(rotY);
-        globeGroupRef.current.quaternion.multiply(rotX);
-
-        prevMouseRef.current = { x: e.clientX, y: e.clientY };
+    const onPointerMove = (e: PointerEvent) => {
+      if (dragging && globeRef.current) {
+        const dx = e.clientX - prev.x;
+        const dy = e.clientY - prev.y;
+        moved += Math.abs(dx) + Math.abs(dy);
+        const qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), dx * 0.0055);
+        const qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), dy * 0.0055);
+        globeRef.current.quaternion.premultiply(qy).multiply(qx);
+        prev = { x: e.clientX, y: e.clientY };
         return;
       }
 
-      // 射线检测图钉
-      const raycaster = new THREE.Raycaster();
-      const pointer = new THREE.Vector2(
-        (mouseX / rect.width) * 2 - 1,
-        -(mouseY / rect.height) * 2 + 1
-      );
-      raycaster.setFromCamera(pointer, camera);
-
-      if (pinsGroupRef.current) {
-        const intersects = raycaster.intersectObjects(pinsGroupRef.current.children, true);
-        if (intersects.length > 0) {
-          let hitMesh = intersects[0].object as THREE.Mesh;
-          while (hitMesh.parent && !hitMesh.userData.pinData && hitMesh.parent !== pinsGroupRef.current) {
-            hitMesh = hitMesh.parent as THREE.Mesh;
-          }
-          if (hitMesh.userData.pinData) {
-            setHoveredPin({
-              pin: hitMesh.userData.pinData,
-              x: mouseX,
-              y: mouseY,
-            });
-            container.style.cursor = 'pointer';
-            return;
-          }
-        }
+      const pin = pickPin(e);
+      if (pin !== hovering) {
+        hovering = pin;
+        canvas.style.cursor = pin ? 'pointer' : 'grab';
       }
-      setHoveredPin(null);
-      container.style.cursor = isDraggingRef.current ? 'grabbing' : 'grab';
+      onHoverRef.current(pin, e.clientX, e.clientY);
     };
 
-    const handleMouseUp = () => {
-      isDraggingRef.current = false;
-      if (container) container.style.cursor = 'grab';
-    };
-
-    const handleClick = (e: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const raycaster = new THREE.Raycaster();
-      const pointer = new THREE.Vector2(
-        (mouseX / rect.width) * 2 - 1,
-        -(mouseY / rect.height) * 2 + 1
-      );
-      raycaster.setFromCamera(pointer, camera);
-
-      if (pinsGroupRef.current) {
-        const intersects = raycaster.intersectObjects(pinsGroupRef.current.children, true);
-        if (intersects.length > 0) {
-          let hitMesh = intersects[0].object as THREE.Mesh;
-          while (hitMesh.parent && !hitMesh.userData.pinData && hitMesh.parent !== pinsGroupRef.current) {
-            hitMesh = hitMesh.parent as THREE.Mesh;
-          }
-          if (hitMesh.userData.pinData) {
-            storySound.playPinDrop();
-            onSelectPin(hitMesh.userData.pinData);
-            return;
-          }
-        }
+    const onPointerUp = (e: PointerEvent) => {
+      const wasDragging = dragging;
+      dragging = false;
+      try {
+        if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+      } catch {
+        /* 同上 */
       }
+      if (!wasDragging || moved > 8) return;
 
-      // 若点击的是地球仪主体且非拖拽，触发点击放大 / 缩回课桌
-      if (globeGroupRef.current) {
-        const globeIntersects = raycaster.intersectObjects(globeGroupRef.current.children, true);
-        if (globeIntersects.length > 0) {
-          storySound.playPaperTurn();
-          onToggleZoomRef.current?.();
-        }
+      const pin = pickPin(e);
+      if (pin) {
+        storySound.playPinDrop();
+        onSelectRef.current(pin);
+        return;
+      }
+      // 只有还在书桌上时才允许点开；放大后靠显式的关闭按钮退出，避免误触
+      if (!zoomedRef.current) {
+        storySound.playPaperTurn();
+        onZoomRef.current();
       }
     };
 
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 1) {
-        isDraggingRef.current = true;
-        isTargetingRef.current = false;
-        prevMouseRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      }
+    const onPointerLeave = () => {
+      onHoverRef.current(null, 0, 0);
     };
 
-    const handleTouchMove = (e: TouchEvent) => {
-      if (isDraggingRef.current && e.touches.length === 1 && globeGroupRef.current) {
-        const deltaX = e.touches[0].clientX - prevMouseRef.current.x;
-        const deltaY = e.touches[0].clientY - prevMouseRef.current.y;
-        const rotY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), deltaX * 0.007);
-        const rotX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), deltaY * 0.007);
-        globeGroupRef.current.quaternion.premultiply(rotY);
-        globeGroupRef.current.quaternion.multiply(rotX);
-        prevMouseRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      }
-    };
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointerleave', onPointerLeave);
 
-    const handleTouchEnd = () => {
-      isDraggingRef.current = false;
-    };
-
-    container.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    container.addEventListener('click', handleClick);
-    container.addEventListener('touchstart', handleTouchStart);
-    window.addEventListener('touchmove', handleTouchMove);
-    window.addEventListener('touchend', handleTouchEnd);
-
-    const handleResize = () => {
-      if (!container || !renderer || !camera) return;
-      const newW = container.clientWidth;
-      const newH = container.clientHeight;
-      camera.aspect = newW / newH;
-      camera.updateProjectionMatrix();
-      renderer.setSize(newW, newH);
-    };
-    window.addEventListener('resize', handleResize);
-
-    // 10. 定格动画 12FPS 步进动画主循环 (Stop-Motion Framerate Stepping)
-    let reqId = 0;
+    /* ---------------- 渲染循环 ---------------- */
     const clock = new THREE.Clock();
-    let stopMotionAccum = 0;
-    const stopMotionInterval = 1 / 14; // 约 14 帧/秒 定格质感
+    let acc = 0;
+    const STEP = 1 / 14; // 定格动画的抽帧节奏
+    let raf = 0;
 
-    const animate = () => {
-      const delta = clock.getDelta();
+    const tick = () => {
+      const dt = clock.getDelta();
       const now = performance.now();
-      stopMotionAccum += delta;
+      acc += dt;
 
-      // 目标点位平滑插值旋转
-      if (isTargetingRef.current && targetQuaternionRef.current && globeGroupRef.current) {
-        globeGroupRef.current.quaternion.slerp(targetQuaternionRef.current, Math.min(1, delta * 4.5));
-        if (globeGroupRef.current.quaternion.angleTo(targetQuaternionRef.current) < 0.01) {
-          isTargetingRef.current = false;
+      if (targetingRef.current && targetQuatRef.current && globeRef.current) {
+        globeRef.current.quaternion.slerp(targetQuatRef.current, Math.min(1, dt * 4.2));
+        if (globeRef.current.quaternion.angleTo(targetQuatRef.current) < 0.008) {
+          targetingRef.current = false;
         }
-      } else if (!isDraggingRef.current && globeGroupRef.current) {
-        // 定格动画抽帧旋转节奏（模拟逐帧拍摄微动）
-        if (stopMotionAccum >= stopMotionInterval) {
-          stopMotionAccum = 0;
-          const frameStep = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.0035);
-          globeGroupRef.current.quaternion.premultiply(frameStep);
-        }
+      } else if (!dragging && globeRef.current && acc >= STEP) {
+        acc = 0;
+        globeRef.current.quaternion.premultiply(
+          new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.0042)
+        );
       }
 
-      // 月球伴星轻柔公转与自转
-      moonOrbitGroup.rotation.y += delta * 0.07;
-      clayMoon.rotation.y += delta * 0.18;
-
-      // 定格微云飘动
-      cloudsGroup.rotation.y -= delta * 0.04;
-
-      // 新落图钉的物理下落与回弹动画
-      if (dropAnimRef.current) {
-        const { startTime, pinGroup, rippleMesh } = dropAnimRef.current;
-        const elapsed = (now - startTime) / 1000;
-
-        if (pinGroup) {
-          const earthR = 2.0;
-          if (elapsed < 0.9) {
-            const bounce = Math.sin(elapsed * 16) * Math.exp(-elapsed * 5.0) * 0.45;
-            const dropAltitude = earthR + 0.06 + Math.max(0, bounce) + (elapsed < 0.22 ? (0.22 - elapsed) * 2.5 : 0);
-            const dir = pinGroup.position.clone().normalize();
-            pinGroup.position.copy(dir.multiplyScalar(dropAltitude));
-          } else {
-            const dir = pinGroup.position.clone().normalize();
-            pinGroup.position.copy(dir.multiplyScalar(earthR + 0.06));
-          }
+      // 新落钉：落下 → 回弹 → 稳住
+      if (dropRef.current) {
+        const { start, pin, ripple } = dropRef.current;
+        const t = (now - start) / 1000;
+        if (t < 0.95) {
+          const bounce = Math.sin(t * 17) * Math.exp(-t * 5.2) * 0.42;
+          const lift = t < 0.2 ? (0.2 - t) * 2.6 : 0;
+          const dir = pin.position.clone().normalize();
+          pin.position.copy(dir.multiplyScalar(R + 0.045 + Math.max(0, bounce) + lift));
+        } else {
+          pin.position.copy(pin.position.clone().normalize().multiplyScalar(R + 0.045));
+          dropRef.current = null;
         }
 
-        if (rippleMesh) {
-          if (elapsed < 1.4) {
-            const scale = 1.0 + elapsed * 2.8;
-            rippleMesh.scale.set(scale, scale, 1);
-            const mat = rippleMesh.material as THREE.MeshBasicMaterial;
-            mat.opacity = Math.max(0, 0.7 - elapsed * 0.5);
-          } else {
-            rippleMesh.visible = false;
-          }
+        // 把钉子投影到屏幕上，"啪！"就能正正打在图钉落点上
+        if (onAnchorRef.current) {
+          const world = new THREE.Vector3();
+          pin.getWorldPosition(world);
+          world.project(camera);
+          const box = canvas.getBoundingClientRect();
+          onAnchorRef.current({
+            x: box.left + (world.x * 0.5 + 0.5) * box.width,
+            y: box.top + (-world.y * 0.5 + 0.5) * box.height,
+          });
         }
-
-        if (elapsed > 1.5) {
-          dropAnimRef.current = null;
+        if (ripple) {
+          if (t < 1.5) {
+            const s = 1 + t * 3.1;
+            ripple.scale.set(s, s, 1);
+            (ripple.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.72 - t * 0.48);
+          } else {
+            ripple.visible = false;
+          }
         }
       }
-
-      // 点击放大模式下相机顺滑推近到 3.55，清晰展示图钉自转；选中图钉聚焦至 3.1
-      const baseZ = isZoomedRef.current ? 3.55 : 5.4;
-      const targetZ = selectedPinRef.current ? 3.1 : baseZ;
-      camera.position.z = THREE.MathUtils.damp(camera.position.z, targetZ, 3.2, delta);
 
       renderer.render(scene, camera);
-      reqId = requestAnimationFrame(animate);
+      raf = requestAnimationFrame(tick);
     };
-
-    reqId = requestAnimationFrame(animate);
+    raf = requestAnimationFrame(tick);
 
     return () => {
-      cancelAnimationFrame(reqId);
-      container.removeEventListener('mousedown', handleMouseDown);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      container.removeEventListener('click', handleClick);
-      container.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-      window.removeEventListener('resize', handleResize);
-
-      earthGeom.dispose();
-      earthMat.dispose();
-      clayAlbedo.dispose();
-      clayNormal.dispose();
+      cancelAnimationFrame(raf);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointerleave', onPointerLeave);
+      geom.dispose();
+      mat.dispose();
+      albedo.dispose();
+      normal.dispose();
+      arcGeom.dispose();
+      brassMat.dispose();
+      brassDeep.dispose();
       renderer.dispose();
+      container.innerHTML = '';
     };
-  }, [onSelectPin]);
+    // size 变化只调整绘制缓冲区，不重建场景
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // 11. 动态生成 3D 泥塑图钉 Mesh
+  /* ---------------- 尺寸变化 ---------------- */
   useEffect(() => {
-    const pinsGroup = pinsGroupRef.current;
-    const ripplesGroup = ripplesGroupRef.current;
-    if (!pinsGroup || !ripplesGroup) return;
+    const renderer = rendererRef.current;
+    if (!renderer || !size) return;
+    renderer.setSize(size, size);
+  }, [size]);
 
-    while (pinsGroup.children.length > 0) {
-      const obj = pinsGroup.children[0] as THREE.Group;
-      obj.traverse((child) => {
-        if ((child as THREE.Mesh).geometry) (child as THREE.Mesh).geometry.dispose();
+  /* ---------------- 视角对齐到某个坐标 ---------------- */
+  useEffect(() => {
+    if (!activeTargetCoord || !globeRef.current) return;
+    const from = latLonToVector3(activeTargetCoord.lat, activeTargetCoord.lon, 1).normalize();
+    targetQuatRef.current = new THREE.Quaternion().setFromUnitVectors(
+      from,
+      new THREE.Vector3(0, 0.18, 1).normalize()
+    );
+    targetingRef.current = true;
+  }, [activeTargetCoord]);
+
+  /* ---------------- 图钉 ---------------- */
+  useEffect(() => {
+    const group = pinsRef.current;
+    const ripples = ripplesRef.current;
+    if (!group || !ripples) return;
+
+    // 清空旧图钉
+    while (group.children.length) {
+      const child = group.children[0];
+      child.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.geometry) m.geometry.dispose();
       });
-      pinsGroup.remove(obj);
+      group.remove(child);
+    }
+    while (ripples.children.length) {
+      const child = ripples.children[0] as THREE.Mesh;
+      child.geometry?.dispose();
+      ripples.remove(child);
     }
 
-    while (ripplesGroup.children.length > 0) {
-      const obj = ripplesGroup.children[0] as THREE.Mesh;
-      if (obj.geometry) obj.geometry.dispose();
-      ripplesGroup.remove(obj);
-    }
+    const headMat = (color: number) =>
+      new THREE.MeshStandardMaterial({ color, roughness: 0.86, metalness: 0.03 });
 
-    const earthRadius = 2.0;
+    pins.forEach((pin, i) => {
+      const isNew = pin.id === newlyDroppedPinId;
+      const at = latLonToVector3(pin.lat, pin.lon, R + 0.045);
+      const node = new THREE.Group();
+      node.position.copy(at);
+      node.lookAt(at.clone().multiplyScalar(2));
+      node.userData.pin = pin;
 
-    pins.forEach((pin, index) => {
-      const isNewDrop = pin.id === newlyDroppedPinId;
-      const pinPos = latLonToVector3(pin.lat, pin.lon, earthRadius + 0.06);
+      const palette = [0xf2e7cb, 0x8fae5e, 0xa8d4ba];
+      const color = pin.role === 'TEACHER' ? 0xd4796f : palette[i % 3];
 
-      const pinGroup = new THREE.Group();
-      pinGroup.position.copy(pinPos);
-      pinGroup.lookAt(pinPos.clone().multiplyScalar(2));
-      pinGroup.userData.pinData = pin;
+      const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.09, 2), headMat(color));
+      head.position.z = 0.115;
+      head.userData.pin = pin;
+      node.add(head);
 
-      const isTeacher = pin.role === 'TEACHER';
-      // 真实软陶色号：红陶色、鼠尾草绿陶色、芥末黄泥色
-      const headColor = isTeacher ? 0xD47A6A : (index % 2 === 0 ? 0xC38D9E : 0xE6B84A);
+      const needle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.014, 0.005, 0.14, 8),
+        new THREE.MeshStandardMaterial({ color: 0x6f5a44, roughness: 0.8 })
+      );
+      needle.rotation.x = Math.PI / 2;
+      needle.position.z = 0.05;
+      needle.userData.pin = pin;
+      node.add(needle);
 
-      // (1) 手捏泥塑球头（带微凹凸软陶手捏感）
-      const headGeom = new THREE.DodecahedronGeometry(0.105, 2);
-      const headMat = new THREE.MeshStandardMaterial({
-        color: headColor,
-        roughness: 0.82,
-        metalness: 0.05,
-      });
-      const headMesh = new THREE.Mesh(headGeom, headMat);
-      headMesh.position.set(0, 0, 0.15);
-      headMesh.userData.pinData = pin;
-      pinGroup.add(headMesh);
+      const pad = new THREE.Mesh(
+        new THREE.SphereGeometry(0.045, 12, 12),
+        new THREE.MeshStandardMaterial({ color: 0xe8d9b2, roughness: 0.9 })
+      );
+      pad.scale.set(1.5, 1.5, 0.45);
+      pad.userData.pin = pin;
+      node.add(pad);
 
-      // (2) 竹签 / 金属牙签细针身
-      const needleGeom = new THREE.CylinderGeometry(0.016, 0.006, 0.16, 8);
-      const needleMat = new THREE.MeshStandardMaterial({
-        color: 0x4A3525, // 细竹木棕色
-        roughness: 0.75,
-        metalness: 0.15,
-      });
-      const needleMesh = new THREE.Mesh(needleGeom, needleMat);
-      needleMesh.rotation.x = Math.PI / 2;
-      needleMesh.position.set(0, 0, 0.07);
-      needleMesh.userData.pinData = pin;
-      pinGroup.add(needleMesh);
+      group.add(node);
 
-      // (3) 底座橡皮泥小团底托
-      const baseBlobGeom = new THREE.SphereGeometry(0.05, 12, 12);
-      const baseBlobMat = new THREE.MeshStandardMaterial({
-        color: 0x7FA389,
-        roughness: 0.9,
-      });
-      const baseBlob = new THREE.Mesh(baseBlobGeom, baseBlobMat);
-      baseBlob.scale.set(1.4, 1.4, 0.5);
-      pinGroup.add(baseBlob);
-
-      // (4) 3D 手绘撕纸旗标牌
-      const labelTexture = createPinLabelTexture(pin.city, pin.name, isTeacher);
-      const labelMat = new THREE.SpriteMaterial({
-        map: labelTexture,
-        transparent: true,
-      });
-      const labelSprite = new THREE.Sprite(labelMat);
-      labelSprite.scale.set(0.72, 0.24, 1);
-      labelSprite.position.set(0, 0.20, 0.20);
-      labelSprite.userData.pinData = pin;
-      pinGroup.add(labelSprite);
-
-      pinsGroup.add(pinGroup);
-
-      // (5) 为新图钉绑定震荡波
-      if (isNewDrop) {
-        const rippleGeom = new THREE.RingGeometry(0.08, 0.18, 32);
-        const rippleMat = new THREE.MeshBasicMaterial({
-          color: 0xE6B84A,
-          transparent: true,
-          opacity: 0.75,
-          side: THREE.DoubleSide,
-        });
-        const rippleMesh = new THREE.Mesh(rippleGeom, rippleMat);
-        rippleMesh.position.copy(pinPos);
-        rippleMesh.lookAt(pinPos.clone().multiplyScalar(2));
-        ripplesGroup.add(rippleMesh);
-
-        dropAnimRef.current = {
-          pinId: pin.id,
-          startTime: performance.now(),
-          pinGroup,
-          rippleMesh,
-        };
+      if (isNew) {
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.075, 0.17, 32),
+          new THREE.MeshBasicMaterial({
+            color: 0xffe3a8,
+            transparent: true,
+            opacity: 0.72,
+            side: THREE.DoubleSide,
+          })
+        );
+        ring.position.copy(at);
+        ring.lookAt(at.clone().multiplyScalar(2));
+        ripples.add(ring);
+        dropRef.current = { start: performance.now(), pin: node, ripple: ring };
       }
     });
   }, [pins, newlyDroppedPinId]);
 
-  return (
-    <div className="relative w-full h-full overflow-hidden select-none">
-      <div 
-        ref={mountRef} 
-        className="w-full h-full cursor-grab active:cursor-grabbing" 
-      />
-
-      {/* 悬停提示：图钉悬停（Hover）显示：“童眼看 [具体地方名称]” */}
-      {hoveredPin && (
-        <div
-          className="absolute z-30 pointer-events-none transform -translate-x-1/2 -translate-y-full mb-3"
-          style={{ left: `${hoveredPin.x}px`, top: `${hoveredPin.y - 14}px` }}
-        >
-          <div className="bg-[#FAF8F0]/95 backdrop-blur-md px-4 py-2 rounded-full flex items-center gap-2 whitespace-nowrap shadow-xl border border-[#122818]/10 animate-in fade-in zoom-in-95 duration-150">
-            <span className="text-sm">📍</span>
-            <div className="flex flex-col">
-              <span className="font-black text-xs md:text-sm text-[#122818] tracking-wide">
-                童眼看 {hoveredPin.pin.city.split('·').slice(1).join(' · ') || hoveredPin.pin.city}
-              </span>
-              <span className="text-[#3B6647] text-[10px] font-serif truncate max-w-[180px]">
-                {hoveredPin.pin.name}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 顶部中央互动指引与放大状态提示 */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3">
-        {isZoomed ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleZoomRef.current?.();
-            }}
-            className="px-4 py-1.5 rounded-full bg-white/90 hover:bg-white text-xs font-bold text-[#122818] shadow-md border border-[#122818]/10 flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105"
-          >
-            <span>🔍 还原课桌远景</span>
-            <span className="text-[10px] text-[#3B6647]">（点击缩小）</span>
-          </button>
-        ) : (
-          <div className="pointer-events-none px-3 py-1 rounded-full bg-white/60 backdrop-blur-xs text-[11px] text-[#3B6647] font-medium flex items-center gap-2">
-            <span>🖐️ 自由旋转</span>
-            <span className="opacity-40">·</span>
-            <span>🔍 点击地球仪放大屏幕中央</span>
-          </div>
-        )}
-      </div>
-    </div>
+  return failed ? (
+    <GlobeFallback pins={pins} size={size} zoomed={zoomed} onToggleZoom={onToggleZoom} />
+  ) : (
+    <div ref={mountRef} style={{ width: size, height: size }} />
   );
 }

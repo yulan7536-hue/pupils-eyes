@@ -1,0 +1,337 @@
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
+import Desk from './Desk';
+import Canopy from './Canopy';
+import ClayGlobe from './ClayGlobe';
+import type { PinItem, WorkItem } from '../types';
+
+interface MainLawnProps {
+  pins: PinItem[];
+  works: WorkItem[];
+  globeOpen: boolean;
+  /** 地球仪放大时是否显示"回到课桌"的关闭按钮（有弹窗时让位给弹窗） */
+  globeChrome: boolean;
+  onToggleGlobe: () => void;
+  activeTargetCoord: { lat: number; lon: number } | null;
+  newlyDroppedPinId: string | null;
+  /** 落钉特写要打在钉子上，所以把钉子的屏幕坐标抛给上层 */
+  onPinAnchor: (at: { x: number; y: number } | null) => void;
+  onOpenBook: (book: 'note' | 'album') => void;
+  onOpenUpload: () => void;
+  onSelectPin: (pin: PinItem) => void;
+  onReplay: () => void;
+}
+
+const TUFTS = [46, 72, 38, 88, 56, 96, 44, 76, 50, 84, 40, 66, 34, 80, 48, 70, 42, 92, 54, 64];
+
+/** 远坡上的一排树冠（x, y, r），下半截被前面的山脊挡住 */
+const GROVE: [number, number, number][] = [
+  [90, 374, 18],
+  [196, 356, 28],
+  [318, 348, 22],
+  [452, 326, 26],
+  [548, 310, 17],
+  [676, 320, 29],
+  [782, 334, 20],
+  [906, 316, 15],
+  [1010, 306, 27],
+  [1128, 320, 19],
+  [1246, 314, 25],
+  [1352, 310, 16],
+];
+
+/** 空气里飘的光点：参考插画里散在场景中的小萤火 */
+const MOTES = [
+  { x: 12, y: 62, s: 0.7, d: 0 },
+  { x: 20, y: 45, s: 1, d: 1.6 },
+  { x: 30, y: 68, s: 0.6, d: 3.1 },
+  { x: 41, y: 40, s: 0.85, d: 0.8 },
+  { x: 55, y: 57, s: 0.65, d: 2.4 },
+  { x: 63, y: 33, s: 0.9, d: 4.2 },
+  { x: 72, y: 60, s: 0.7, d: 1.1 },
+  { x: 83, y: 44, s: 1, d: 3.6 },
+  { x: 92, y: 66, s: 0.6, d: 2 },
+  { x: 7, y: 38, s: 0.8, d: 5 },
+  { x: 47, y: 74, s: 0.55, d: 4.6 },
+  { x: 78, y: 76, s: 0.6, d: 0.4 },
+];
+
+/** 草坪上的黏土小花：只放几处，给空场一点活气 */
+function LawnDecor() {
+  return (
+    <div
+      aria-hidden="true"
+      style={{ position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none' }}
+    >
+      {[
+        { left: '17%', bottom: '2%', s: 1 },
+        { left: '26%', bottom: '6%', s: 0.8 },
+        { left: '76%', bottom: '3%', s: 1.1 },
+        { left: '86%', bottom: '7%', s: 0.85 },
+        { left: '7%', bottom: '10%', s: 0.9 },
+        { left: '94%', bottom: '13%', s: 0.75 },
+      ].map((f, i) => (
+        <svg
+          key={`f${i}`}
+          viewBox="0 0 40 52"
+          style={{
+            position: 'absolute',
+            left: f.left,
+            bottom: f.bottom,
+            width: `calc(var(--u) * ${3.4 * f.s})`,
+            height: `calc(var(--u) * ${4.4 * f.s})`,
+            transform: 'translateX(-50%)',
+          }}
+        >
+          <path d="M20 52 C 20 40 20 32 20 24" stroke="#5f8f3d" strokeWidth="2.6" strokeLinecap="round" />
+          {[0, 72, 144, 216, 288].map((deg) => (
+            <ellipse key={deg} cx="20" cy="14" rx="5.2" ry="8" fill="#f8f3da" transform={`rotate(${deg} 20 20)`} />
+          ))}
+          <circle cx="20" cy="20" r="4" fill="#ecc96b" />
+        </svg>
+      ))}
+    </div>
+  );
+}
+
+/** 地平线上的草叶fringe：让草坪的顶边不是一刀切 */
+const BLADE_H = [52, 74, 40, 88, 64, 46, 96, 58, 80, 44, 70, 92, 50, 78, 62, 86, 42, 68, 98, 54, 76, 48, 90, 60, 82, 46, 72, 94, 56, 66, 84, 50];
+
+function BladeFringe() {
+  return (
+    <div className="lawn__blades" aria-hidden="true">
+      {BLADE_H.map((h, i) => (
+        <svg key={i} viewBox="0 0 24 100" style={{ height: `${h}%` }}>
+          <path d="M12 100 C 11 74 7 52 2 34 C 9 54 12 74 13 100 Z" fill="#6c9a45" />
+          <path d="M13 100 C 14 70 18 50 22 32 C 18 52 14 72 15 100 Z" fill="#7cad52" />
+        </svg>
+      ))}
+    </div>
+  );
+}
+
+/** 飘浮光点 */
+function Fireflies() {
+  return (
+    <div className="motes" aria-hidden="true">
+      {MOTES.map((m, i) => (
+        <span
+          key={i}
+          className="mote"
+          style={{
+            left: `${m.x}%`,
+            top: `${m.y}%`,
+            width: `calc(var(--u) * ${0.7 * m.s})`,
+            height: `calc(var(--u) * ${0.7 * m.s})`,
+            animationDelay: `${-m.d}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function Tuft({ h }: { h: number }) {
+  return (
+    <svg viewBox="0 0 120 100" preserveAspectRatio="none" style={{ height: `${h}%` }} aria-hidden="true">
+      <path d="M62 100 C 58 66 48 42 26 22 C 50 40 60 66 64 100 Z" fill="#5b8a37" />
+      <path d="M64 100 C 62 58 56 34 40 8 C 58 32 65 60 68 100 Z" fill="#6d9d42" />
+      <path d="M66 100 C 68 62 76 38 96 18 C 80 44 71 70 70 100 Z" fill="#79aa4c" />
+      <path d="M60 100 C 54 70 42 54 18 44 C 42 56 57 74 62 100 Z" fill="#648f3c" />
+      <path d="M68 100 C 72 72 84 56 106 48 C 86 60 74 76 71 100 Z" fill="#6d9d42" />
+      <path d="M63 100 C 63 64 66 44 74 26 C 70 48 68 70 68 100 Z" fill="#82b254" />
+      <path d="M64 100 C 60 74 52 60 34 52 C 54 62 62 78 66 100 Z" fill="#548232" />
+    </svg>
+  );
+}
+
+export default function MainLawn({
+  pins,
+  works,
+  globeOpen,
+  globeChrome,
+  onToggleGlobe,
+  activeTargetCoord,
+  newlyDroppedPinId,
+  onPinAnchor,
+  onOpenBook,
+  onOpenUpload,
+  onSelectPin,
+  onReplay,
+}: MainLawnProps) {
+  const slotRef = useRef<HTMLDivElement | null>(null);
+  const [globeSize, setGlobeSize] = useState(600);
+  const [dock, setDock] = useState({ x: 0, y: 0, scale: 0.3 });
+  const [hover, setHover] = useState<{ pin: PinItem; x: number; y: number } | null>(null);
+
+  const noteCount = useMemo(() => works.filter((w) => w.role === 'TEACHER').length, [works]);
+  const albumCount = useMemo(() => works.filter((w) => w.role === 'STUDENT').length, [works]);
+
+  // Esc 退出地球仪放大
+  useEffect(() => {
+    if (!globeOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onToggleGlobe();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [globeOpen, onToggleGlobe]);
+
+  // 地球仪的画布边长：随视口变化，封顶 640
+  useEffect(() => {
+    const measureSize = () => {
+      setGlobeSize(Math.min(window.innerHeight * 0.78, window.innerWidth * 0.94, 640));
+    };
+    measureSize();
+    window.addEventListener('resize', measureSize);
+    return () => window.removeEventListener('resize', measureSize);
+  }, []);
+
+  // 量出桌面上的落座位置，把地球仪从"屏幕正中"平移到书桌上
+  useEffect(() => {
+    const measure = () => {
+      const el = slotRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setDock({
+        x: r.left + r.width / 2 - window.innerWidth / 2,
+        y: r.top + r.height / 2 - window.innerHeight / 2,
+        scale: r.width / globeSize,
+      });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    const t = window.setTimeout(measure, 120);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.clearTimeout(t);
+    };
+  }, [globeSize]);
+
+  const globeStyle = {
+    '--globe-size': `${globeSize}px`,
+    '--gx': globeOpen ? '0px' : `${dock.x}px`,
+    '--gy': globeOpen ? '0px' : `${dock.y}px`,
+    '--gs': globeOpen ? 1 : dock.scale,
+  } as CSSProperties;
+
+  return (
+    <>
+    <div className="scene stage-in">
+      <div className="scene__field" aria-hidden="true" />
+      <div className="scene__haze" aria-hidden="true" />
+
+      {/* 远坡：一条极淡的地平线，只负责把天和草分开，不抢树冠的戏 */}
+      <div className="scene__hills" aria-hidden="true">
+        <svg viewBox="0 0 1440 640" preserveAspectRatio="none">
+          <path
+            fill="var(--hill-far)"
+            d="M0 452 C 150 424 268 442 402 420 C 542 396 674 428 806 410 C 940 392 1088 420 1226 402 C 1320 390 1396 396 1440 392 L1440 640 L0 640 Z"
+          />
+          <g>
+            {GROVE.map(([x, y, r], i) => (
+              <circle key={i} cx={x} cy={y + 96} r={r} fill={i % 3 === 0 ? '#b6d38e' : '#c0da9a'} />
+            ))}
+          </g>
+          <path
+            fill="var(--hill-mid)"
+            d="M0 486 C 156 456 282 474 420 452 C 570 428 706 460 862 444 C 1006 428 1160 454 1300 440 C 1364 434 1414 438 1440 436 L1440 640 L0 640 Z"
+          />
+        </svg>
+      </div>
+
+      {/* 树冠：横跨顶部的深绿黏土拱廊 */}
+      <Canopy />
+
+      {/* 魔法草坪：一整块压出来的黏土台面，顶边是圆润的草脊 */}
+      <div className="lawn" aria-hidden="true">
+        <div className="lawn__body">
+          <div className="lawn__patch lawn__patch--a" />
+          <div className="lawn__patch lawn__patch--b" />
+          <BladeFringe />
+        </div>
+      </div>
+
+      <LawnDecor />
+      <div className="scene__glow" aria-hidden="true" />
+      <Fireflies />
+
+      {/* 顶部 UI：无边框，白字压一圈奶油描边，直接坐在树冠上 */}
+      <header className="hud">
+        <h1 className="hud__title">
+          <span className="hud__kicker">童眼看世界 · 行智开物</span>
+          <span className="hud__headline">成果展示</span>
+        </h1>
+        <button type="button" className="hud__action" onClick={onOpenUpload}>
+          上传课题
+        </button>
+      </header>
+
+      <Desk
+        noteCount={noteCount}
+        albumCount={albumCount}
+        onOpenNote={() => onOpenBook('note')}
+        onOpenAlbum={() => onOpenBook('album')}
+        globeSlotRef={slotRef}
+      />
+
+      {/* 前景草丛：压在桌腿前，拉开前后层次 */}
+      <div className="tufts" aria-hidden="true">
+        {TUFTS.map((h, i) => (
+          <Tuft key={i} h={h} />
+        ))}
+      </div>
+
+      <button type="button" className="hud__replay" onClick={onReplay}>
+        重温开场
+      </button>
+    </div>
+
+    {/* 地球仪挂到 body 上：与它的遮罩处在同一个层叠上下文里，
+        否则 .scene 的裁剪/合成层会让整颗球跟着背景一起被高斯模糊掉 */}
+    {createPortal(
+      <>
+        {/* 地球仪放大时的背景：整屏高斯模糊，只剩球体清晰 */}
+        {globeOpen && (
+          <div className="veil veil--globe" onClick={onToggleGlobe} aria-hidden="true" />
+        )}
+
+        <div className="globe-layer" data-zoomed={globeOpen} style={globeStyle}>
+          <ClayGlobe
+            pins={pins}
+            size={globeSize}
+            zoomed={globeOpen}
+            activeTargetCoord={activeTargetCoord}
+            newlyDroppedPinId={newlyDroppedPinId}
+            onSelectPin={onSelectPin}
+            onToggleZoom={onToggleGlobe}
+            onHoverPin={(pin, x, y) => setHover(pin ? { pin, x, y } : null)}
+            onPinAnchor={onPinAnchor}
+          />
+        </div>
+
+        {/* 图钉悬停气泡：童眼看 [地区名称] */}
+        {hover && (
+          <div className="pin-tip" style={{ left: hover.x, top: hover.y - 14 }} role="status">
+            童眼看 {hover.pin.city.split('·').pop()}
+          </div>
+        )}
+      </>,
+      document.body
+    )}
+
+    {globeChrome && (
+      <button
+        type="button"
+        className="veil__close globe-close"
+        onClick={onToggleGlobe}
+        aria-label="回到课桌"
+      >
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+          <path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      </button>
+    )}
+    </>
+  );
+}

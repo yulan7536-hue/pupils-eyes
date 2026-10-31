@@ -14,6 +14,10 @@ coverage/
 *.avi
 public/assets/aistudio/
 
+# 开场动画必须随仓库分发，否则首屏 10 秒全黑
+!public/media/
+!public/media/opening.mp4
+
 # Editor directories
 .idea/
 .vscode/
