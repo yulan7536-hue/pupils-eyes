@@ -27,9 +27,9 @@ export default function PaperDetailModal({ pin, onClose, onNavigateToGallery }: 
   const isTeacher = pin.role === 'TEACHER';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#162B1C]/50 backdrop-blur-[3px] select-none">
+    <div className="fixed inset-0 z-50 pointer-events-none flex items-end sm:items-center justify-end p-4 md:p-8 select-none">
       <div 
-        className="relative w-full max-w-lg clay-card p-6 md:p-8 text-[#1E3824] animate-in fade-in zoom-in-95 duration-150"
+        className="pointer-events-auto relative w-full max-w-md clay-card p-6 md:p-7 text-[#1E3824] shadow-2xl animate-in slide-in-from-right duration-250"
       >
         {/* 顶部手捏软陶胶带 */}
         <div 

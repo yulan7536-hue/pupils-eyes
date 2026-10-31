@@ -6,6 +6,7 @@ import ClayGlobe, { PinItem } from './components/ClayGlobe';
 import PaperDetailModal from './components/PaperDetailModal';
 import CreationModal, { SubmissionPayload } from './components/CreationModal';
 import GalleryWall, { GalleryItem } from './components/GalleryWall';
+import AudioDiscWidget from './components/AudioDiscWidget';
 import { 
   loadSavedWorks, 
   saveWorks, 
@@ -15,7 +16,7 @@ import {
   INITIAL_PINS 
 } from './data/initialWorks';
 import { storySound } from './utils/sound';
-import { Compass, Sparkles, MapPin, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, CheckCircle2 } from 'lucide-react';
 
 type SceneStep = 'BOOK_INTRO' | 'VINE_DOOR' | 'EXPLORE';
 
@@ -217,66 +218,55 @@ export default function App() {
             pinCount={pins.length}
           />
 
-          {/* 上半部：3D 泥塑小王子定格地球探索区 */}
-          <section className="relative w-full h-[76vh] md:h-[80vh] border-b-2 border-[#1E3824] bg-[#EAEFE6] overflow-hidden">
-            {/* 左上角手捏黏土标题说明卡片 */}
-            <div className="absolute top-5 left-5 z-20 max-w-sm pointer-events-auto">
-              <div className="clay-card p-5">
-                <div className="flex items-center gap-2 text-xs text-[#52796F] font-black uppercase tracking-wider mb-1">
-                  <Compass size={15} className="text-[#6E9277]" />
-                  <span>Stop-Motion Clay Planet</span>
-                </div>
-                <h1 className="text-xl md:text-2xl font-black tracking-tight text-[#1E3824] font-serif">
-                  童眼看世界 · 定格星体探索
-                </h1>
-                <p className="text-xs text-[#52796F] mt-2 leading-relaxed font-serif">
-                  拖拽旋转定格黏土打造的绿色星球，轻触中国区域的陶土图钉翻开各地区师生的自然观察手记。
-                </p>
-                
-                {/* 快捷点位切换胶囊 */}
-                <div className="mt-3.5 pt-3 border-t-2 border-[#1E3824]/15 flex flex-wrap gap-1.5 items-center">
-                  <span className="text-[11px] font-black text-[#52796F]">热点坐标：</span>
-                  {pins.slice(0, 4).map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveTargetCoord({ lat: p.lat, lon: p.lon });
-                        setSelectedPin(p);
-                      }}
-                      className="px-2.5 py-0.5 text-[11px] font-bold bg-[#FAF5E8] hover:bg-[#6E9277] hover:text-[#FAF5E8] border-2 border-[#1E3824] rounded-full transition-colors shadow-xs"
-                    >
-                      {p.city.split('·').pop()}
-                    </button>
-                  ))}
-                </div>
+          {/* 上半部：3D 定格黏土星体探索区（置中无遮挡，学习参考视频设计） */}
+          <section className="relative w-full h-[calc(100vh-64px)] min-h-[600px] border-b-2 border-[#1E3824] bg-[#EAEFE6] overflow-hidden flex items-center justify-center">
+            
+            {/* 左下角极简点位折叠条（贴底边缘，绝不遮挡中央 3D 地球） */}
+            <div className="absolute bottom-6 left-6 z-20 hidden md:flex items-center gap-2">
+              <div className="bg-[#FAF5E8]/90 backdrop-blur-xs border-2 border-[#1E3824] rounded-full px-3 py-1.5 text-xs font-black text-[#1E3824] flex items-center gap-2 shadow-xs">
+                <span className="text-[#6E9277]">📍</span>
+                <span>观测坐标：</span>
+                {pins.slice(0, 4).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      storySound.playPinDrop();
+                      setActiveTargetCoord({ lat: p.lat, lon: p.lon });
+                      setSelectedPin(p);
+                    }}
+                    className="px-2.5 py-0.5 text-[11px] font-bold bg-white hover:bg-[#6E9277] hover:text-white border border-[#1E3824] rounded-full transition-colors cursor-pointer"
+                  >
+                    {p.city.split('·').pop()}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* 右上角创建按钮悬浮辅助 */}
-            <div className="absolute top-5 right-5 z-20 hidden sm:block">
-              <button
-                type="button"
-                onClick={() => {
-                  storySound.playPaperTurn();
-                  setIsCreateModalOpen(true);
-                }}
-                className="clay-btn px-5 py-2.5 font-black text-xs md:text-sm flex items-center gap-2"
-              >
-                <Sparkles size={16} className="text-[#E6B84A]" />
-                <span>童眼看 ______ (上传成果)</span>
-              </button>
-            </div>
+            {/* 正下方翻阅成果画卷平滑滚动指示器（居中下沿，不挡球体） */}
+            <button
+              type="button"
+              onClick={() => {
+                storySound.playPaperTurn();
+                const el = document.getElementById('gallery-section');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-5 py-2 bg-[#FAF5E8]/90 hover:bg-[#FAF5E8] border-2 border-[#1E3824] rounded-full shadow-xs text-xs font-black text-[#1E3824] transition-all hover:scale-105 cursor-pointer group"
+            >
+              <span>🌿 滚动翻阅师生共创画卷</span>
+              <span className="group-hover:translate-y-0.5 transition-transform text-[#6E9277]">↓</span>
+            </button>
 
-            {/* 核心 3D 地球 Canvas */}
+            {/* 核心 3D 地球 Canvas（完全显现置中无遮挡） */}
             <ClayGlobe
               pins={pins}
+              selectedPin={selectedPin}
               onSelectPin={(pin) => setSelectedPin(pin)}
               activeTargetCoord={activeTargetCoord}
               newlyDroppedPinId={newlyDroppedPinId}
             />
 
-            {/* 纸质图钉详情卡片弹窗 */}
+            {/* 右侧边栏式纸质图钉详情抽屉（靠右展开，保证居中地球全貌可见） */}
             <PaperDetailModal
               pin={selectedPin}
               onClose={() => setSelectedPin(null)}
@@ -294,6 +284,12 @@ export default function App() {
             />
           </section>
 
+          {/* 右下角同心圆定格旋转黑胶/黏土八音盒挂件（参考视频动效） */}
+          <AudioDiscWidget 
+            isMuted={isMuted} 
+            onToggleSound={handleToggleSound} 
+          />
+
           {/* 阶段二：定制化上传与级联选择模态框 */}
           <CreationModal
             isOpen={isCreateModalOpen}
@@ -307,7 +303,7 @@ export default function App() {
             <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-2">
                 <span>🍃</span>
-                <span>童眼看世界 · 电影《小王子》定格纸质美学教育展示网站</span>
+                <span>童眼看世界 · 定格泥塑手绘美学教育展示空间</span>
               </div>
               <div className="flex items-center gap-4">
                 <button

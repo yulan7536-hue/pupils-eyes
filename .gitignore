@@ -6,3 +6,16 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Large media attachments & recordings (prevents GitHub 100MB / large file push errors)
+*.mov
+*.mp4
+*.mkv
+*.avi
+public/assets/aistudio/
+
+# Editor directories
+.idea/
+.vscode/
+*.swp
+*.swo

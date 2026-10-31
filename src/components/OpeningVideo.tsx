@@ -65,7 +65,7 @@ export default function OpeningVideo({ onComplete }: OpeningVideoProps) {
         ctx.fillRect(rx, ry, 2, 2);
       }
 
-      // 3. 背景手绘校舍廊柱与拱门（小王子画风）
+      // 3. 背景手绘校舍廊柱与拱门（定格手绘自然画风）
       ctx.strokeStyle = '#2D4A34';
       ctx.lineWidth = 2.5;
       ctx.lineCap = 'round';
@@ -173,7 +173,7 @@ export default function OpeningVideo({ onComplete }: OpeningVideoProps) {
       ctx.arc(boyX - 2, boyY - 4, 15, Math.PI * 0.8, Math.PI * 2.2);
       ctx.fill();
 
-      // 《小王子》标志性飞扬的红围巾！
+      // 奔跑中迎风飘扬的红围巾
       ctx.fillStyle = '#D64545';
       ctx.strokeStyle = '#8B0000';
       ctx.lineWidth = 2;

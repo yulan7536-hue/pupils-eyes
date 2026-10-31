@@ -182,65 +182,45 @@ export function createClayMountain(scale = 0.16): THREE.Group {
   return mountainGroup;
 }
 
-// 5. 构建《小王子》B612 小行星与玻璃罩小玫瑰 (Clay Asteroid B612)
-export function createLittlePrinceB612(): THREE.Group {
-  const asteroid = new THREE.Group();
+// 5. 构建手捏自然卫星月球 (Handcrafted Clay Moon)
+export function createClayMoon(): THREE.Group {
+  const moonGroup = new THREE.Group();
 
-  // 凹凸不平的坑洞小行星主体
-  const bodyGeom = new THREE.DodecahedronGeometry(0.38, 2);
+  // 凹凸不平的坑洞月球主体
+  const bodyGeom = new THREE.DodecahedronGeometry(0.36, 2);
   const pos = bodyGeom.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const vx = pos.getX(i);
     const vy = pos.getY(i);
     const vz = pos.getZ(i);
     const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
-    const bump = Math.sin(vx * 8) * Math.cos(vy * 8) * 0.04;
-    pos.setXYZ(i, (vx / len) * (0.38 + bump), (vy / len) * (0.38 + bump), (vz / len) * (0.38 + bump));
+    const bump = Math.sin(vx * 7) * Math.cos(vy * 7) * 0.035;
+    pos.setXYZ(i, (vx / len) * (0.36 + bump), (vy / len) * (0.36 + bump), (vz / len) * (0.36 + bump));
   }
   bodyGeom.computeVertexNormals();
 
-  const asteroidMat = new THREE.MeshStandardMaterial({
-    color: 0xDECDBB, // 暖砂黄小行星陶土
-    roughness: 0.9,
-    metalness: 0.05,
+  const moonMat = new THREE.MeshStandardMaterial({
+    color: 0xEAE2CF, // 暖燕麦白陶土
+    roughness: 0.88,
+    metalness: 0.04,
   });
-  const bodyMesh = new THREE.Mesh(bodyGeom, asteroidMat);
-  asteroid.add(bodyMesh);
+  const bodyMesh = new THREE.Mesh(bodyGeom, moonMat);
+  moonGroup.add(bodyMesh);
 
-  // 标志性红陶玫瑰 (Red Clay Rose)
-  const roseMat = new THREE.MeshStandardMaterial({
-    color: 0xD64545, // 玫瑰红陶
-    roughness: 0.75,
+  // 几个浅凹月坑 (Crater indents)
+  const craterMat = new THREE.MeshStandardMaterial({
+    color: 0xD8CDBC,
+    roughness: 0.95,
   });
-  const rose = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), roseMat);
-  rose.position.set(0, 0.44, 0);
-  asteroid.add(rose);
+  const crater1 = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.02, 6, 12), craterMat);
+  crater1.position.set(0.18, 0.22, 0.18);
+  crater1.lookAt(crater1.position.clone().multiplyScalar(2));
+  moonGroup.add(crater1);
 
-  // 玫瑰绿枝
-  const stemMat = new THREE.MeshBasicMaterial({ color: 0x2D4A34 });
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.08, 6), stemMat);
-  stem.position.set(0, 0.40, 0);
-  asteroid.add(stem);
+  const crater2 = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.015, 6, 12), craterMat);
+  crater2.position.set(-0.2, 0.1, 0.22);
+  crater2.lookAt(crater2.position.clone().multiplyScalar(2));
+  moonGroup.add(crater2);
 
-  // 玻璃防护罩 (Glass Dome)
-  const glassMat = new THREE.MeshPhysicalMaterial({
-    color: 0xFFFFFF,
-    transparent: true,
-    opacity: 0.35,
-    roughness: 0.1,
-    transmission: 0.7,
-    thickness: 0.05,
-    depthWrite: false,
-  });
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.65), glassMat);
-  dome.position.set(0, 0.42, 0);
-  asteroid.add(dome);
-
-  // 旁边一棵细小的嫩芽猴面包树 (Baobab shoot)
-  const shoot = createClayTree(0.05);
-  shoot.position.set(0.24, 0.28, 0.12);
-  shoot.rotation.z = -0.5;
-  asteroid.add(shoot);
-
-  return asteroid;
+  return moonGroup;
 }

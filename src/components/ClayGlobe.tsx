@@ -6,7 +6,7 @@ import {
   createClayNormalTexture,
   createClayTree,
   createClayMountain,
-  createLittlePrinceB612,
+  createClayMoon,
 } from '../utils/clayTextures';
 
 export interface PinItem {
@@ -25,6 +25,7 @@ export interface PinItem {
 interface ClayGlobeProps {
   pins: PinItem[];
   onSelectPin: (pin: PinItem) => void;
+  selectedPin?: PinItem | null;
   activeTargetCoord?: { lat: number; lon: number } | null;
   newlyDroppedPinId?: string | null;
 }
@@ -83,6 +84,7 @@ function createPinLabelTexture(cityName: string, title: string, isTeacher: boole
 export default function ClayGlobe({
   pins,
   onSelectPin,
+  selectedPin,
   activeTargetCoord,
   newlyDroppedPinId,
 }: ClayGlobeProps) {
@@ -96,6 +98,12 @@ export default function ClayGlobe({
   const globeGroupRef = useRef<THREE.Group | null>(null);
   const pinsGroupRef = useRef<THREE.Group | null>(null);
   const ripplesGroupRef = useRef<THREE.Group | null>(null);
+  const selectedPinRef = useRef<PinItem | null>(null);
+
+  // 同步选中的图钉引用用于相机推拉镜头动效（学习参考视频的聚焦拉近体验）
+  useEffect(() => {
+    selectedPinRef.current = selectedPin || null;
+  }, [selectedPin]);
 
   // 四元数目标平滑旋转
   const targetQuaternionRef = useRef<THREE.Quaternion | null>(null);
@@ -138,7 +146,9 @@ export default function ClayGlobe({
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.set(0, 1.25, 5.2);
+    // 摄像机放置在正中央，确保地球完全显现在网页中央、无任何偏位与遮挡
+    camera.position.set(0, 0, 5.4);
+    camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({
@@ -273,12 +283,12 @@ export default function ClayGlobe({
 
     globeGroup.add(landscapeGroup);
 
-    // 6. 环绕公转的《小王子》B612 小行星（带红陶玫瑰与玻璃罩）
-    const b612Group = new THREE.Group();
-    const b612 = createLittlePrinceB612();
-    b612.position.set(2.8, 0.8, -0.6);
-    b612Group.add(b612);
-    scene.add(b612Group);
+    // 6. 环绕公转的手捏陶土月球伴星
+    const moonOrbitGroup = new THREE.Group();
+    const clayMoon = createClayMoon();
+    clayMoon.position.set(3.0, 0.6, -0.5);
+    moonOrbitGroup.add(clayMoon);
+    scene.add(moonOrbitGroup);
 
     // 7. 定格手捏蓬松白泥小云团
     const cloudsGroup = new THREE.Group();
@@ -471,9 +481,9 @@ export default function ClayGlobe({
         }
       }
 
-      // B612 小行星轻柔公转与自转
-      b612Group.rotation.y += delta * 0.08;
-      b612.rotation.y += delta * 0.2;
+      // 月球伴星轻柔公转与自转
+      moonOrbitGroup.rotation.y += delta * 0.07;
+      clayMoon.rotation.y += delta * 0.18;
 
       // 定格微云飘动
       cloudsGroup.rotation.y -= delta * 0.04;
@@ -511,6 +521,10 @@ export default function ClayGlobe({
           dropAnimRef.current = null;
         }
       }
+
+      // 学习参考视频的镜头聚焦推进动效：点击图钉时相机顺滑推进，关闭时拉远恢复全景
+      const targetZ = selectedPinRef.current ? 4.35 : 5.4;
+      camera.position.z = THREE.MathUtils.damp(camera.position.z, targetZ, 3.2, delta);
 
       renderer.render(scene, camera);
       reqId = requestAnimationFrame(animate);
@@ -668,12 +682,12 @@ export default function ClayGlobe({
         </div>
       )}
 
-      {/* 底部黏土印章互动指引徽章 */}
-      <div className="absolute bottom-5 left-6 z-20 pointer-events-none flex items-center gap-2 clay-card px-3.5 py-1.5 text-xs text-[#52796F]">
+      {/* 底部黏土印章互动指引徽章（学习参考视频：置于底部中央，保证中央 3D 球体 100% 无任何遮挡） */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex items-center gap-2 clay-card px-4 py-1.5 text-xs text-[#52796F] whitespace-nowrap shadow-md">
         <span className="text-sm">🖐️</span>
-        <span className="font-bold text-[#1E3824]">拖拽旋转软陶泥星球</span>
+        <span className="font-bold text-[#1E3824]">拖拽旋转定格黏土星球</span>
         <span>·</span>
-        <span>📍 轻触图钉翻阅手记</span>
+        <span>📍 轻触图钉推进视角</span>
       </div>
     </div>
   );

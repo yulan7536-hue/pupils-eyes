@@ -139,7 +139,7 @@ export const INITIAL_WORKS: GalleryItem[] = [
     content: '橘子花开的时候，树林里像下了雪一样白，好香好香！我用果园地里的黄泥巴捏了一只小蜜蜂，用捡来的两片干叶子当翅膀，轻轻放在花朵旁边。我怕它找不到妈妈，就用树枝给它搭了一个小伞。',
     likes: 74,
     comments: [
-      { id: 'c5', user: '成都志愿者林姐姐', text: '小伞的设计太暖了，像小王子的玫瑰花罩！', time: '2天前' }
+      { id: 'c5', user: '成都志愿者林姐姐', text: '小伞的设计太暖了，像给小蜜蜂撑起的大自然保护伞！', time: '2天前' }
     ]
   },
   {
@@ -164,8 +164,8 @@ export const INITIAL_WORKS: GalleryItem[] = [
 ];
 
 // 本地存储读写辅助
-const STORAGE_KEY_WORKS = 'little_prince_nature_works_v1';
-const STORAGE_KEY_PINS = 'little_prince_nature_pins_v1';
+const STORAGE_KEY_WORKS = 'tongyan_nature_works_v2';
+const STORAGE_KEY_PINS = 'tongyan_nature_pins_v2';
 
 export function loadSavedWorks(): GalleryItem[] {
   if (typeof window === 'undefined') return INITIAL_WORKS;

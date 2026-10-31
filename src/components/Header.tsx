@@ -35,7 +35,7 @@ export default function Header({
           </span>
           <div className="flex flex-col">
             <span className="font-serif font-black text-sm md:text-base leading-tight">童眼看世界</span>
-            <span className="text-[10px] text-[#52796F] font-sans font-bold -mt-0.5">小王子定格黏土星体</span>
+            <span className="text-[10px] text-[#52796F] font-sans font-bold -mt-0.5">自然定格黏土星体</span>
           </div>
         </a>
 
