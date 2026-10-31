@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LocationChoice, RadarAnalysis, Role, SubmissionPayload } from '../types';
 import { storySound } from '../utils/sound';
 import { analyzeLesson, analyzeLessonSync } from '../utils/aiLesson';
-import { PROVIDERS_META, providerStates, readyProviders } from '../utils/aiConfig';
 import { ACCEPT_ATTR, parseLessonFile } from '../utils/lessonFile';
 import RadarChart from './RadarChart';
-import AiSettings from './AiSettings';
 
 interface RoleDialogProps {
   location: LocationChoice;
@@ -39,26 +37,8 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
   const [dragging, setDragging] = useState(false);
   const [radar, setRadar] = useState<RadarAnalysis | null>(null);
   const [showRadar, setShowRadar] = useState(false);
-  const [trying, setTrying] = useState('');
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [engineTick, setEngineTick] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const runId = useRef(0);
-
-  /** 当前实际会用的引擎一览，Key 变更后靠 engineTick 触发重算 */
-  const engine = useMemo(() => {
-    void engineTick;
-    const states = providerStates();
-    const ready = readyProviders();
-    // 只数填了 Key 的平台：免 Key 通道慢且限流，不算「已提速」
-    const keyed = states.filter((s) => s.ready && !s.keyless).length;
-    return {
-      keyed,
-      label: ready.length
-        ? ready.map((id) => PROVIDERS_META.find((p) => p.id === id)!.short).join(' → ')
-        : '仅本地规则引擎',
-    };
-  }, [engineTick]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -87,11 +67,7 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
     setStage('analyzing');
     setRadar(analyzeLessonSync(trimmed)); // 立即出图，教师不用等
     try {
-      const analysis = await analyzeLesson(trimmed, {
-        onTrying: (label) => {
-          if (my === runId.current) setTrying(label);
-        },
-      });
+      const analysis = await analyzeLesson(trimmed);
       if (my !== runId.current) return;
       setRadar(analysis);
       setStage('done');
@@ -100,8 +76,6 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
       if (my !== runId.current) return;
       setStage('done');
       setShowRadar(true);
-    } finally {
-      if (my === runId.current) setTrying('');
     }
   }, []);
 
@@ -228,23 +202,6 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
             {/* 教师：教案上传 + 自动六维识别 */}
             {teacher && (
               <div className="intake">
-                <div className="intake__engine">
-                  <span className={`intake__dot${engine.keyed > 0 ? ' is-on' : ''}`} aria-hidden="true" />
-                  <span className="intake__engine-text">
-                    识别引擎：<b>{engine.label}</b>
-                    {engine.keyed > 0
-                      ? `（${engine.keyed} 个已就绪，通常 1-3 秒出结果）`
-                      : '，尚未接免费模型，走免 Key 通道约需 20 秒'}
-                  </span>
-                  <button
-                    type="button"
-                    className="intake__engine-btn"
-                    onClick={() => setSettingsOpen(true)}
-                  >
-                    设置
-                  </button>
-                </div>
-
                 <input
                   ref={inputRef}
                   type="file"
@@ -293,7 +250,7 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
                     ) : stage === 'analyzing' ? (
                       <>
                         <b>正在通读教案，识别六个维度…</b>
-                        <span>{trying ? `正在调用 ${trying}` : '雷达图已先出图，AI 点评回来后自动覆盖'}</span>
+                        <span>雷达图已先出图，点评回来后自动补全</span>
                       </>
                     ) : fileName ? (
                       <>
@@ -338,29 +295,11 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
                   <div className="radar-wrap radar-wrap--compact">
                     <div className="radar-wrap__head">
                       <span className="radar-wrap__title">六维智能雷达图</span>
-                      <span className="radar-wrap__tag tnum">
-                        {stage === 'analyzing'
-                          ? '识别中…'
-                          : radar.source === 'ai'
-                            ? `${radar.model ?? 'AI'}${radar.latencyMs ? ` · ${(radar.latencyMs / 1000).toFixed(1)}s` : ''}`
-                            : '规则引擎'}
-                      </span>
+                      {stage === 'analyzing' && (
+                        <span className="radar-wrap__tag tnum">识别中…</span>
+                      )}
                     </div>
                     <RadarChart analysis={radar} />
-
-                    {stage === 'done' && radar.source === 'heuristic' && (
-                      <p className="intake__hint">
-                        当前为本地规则引擎评分（不联网、零延迟）。想拿到真正读懂教案的 AI 点评，
-                        <button
-                          type="button"
-                          className="intake__hint-btn"
-                          onClick={() => setSettingsOpen(true)}
-                        >
-                          填一个免费模型 Key
-                        </button>
-                        ，30 秒即可，永久免费。
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
@@ -491,13 +430,6 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
         )}
       </div>
       </div>
-
-      {settingsOpen && (
-        <AiSettings
-          onClose={() => setSettingsOpen(false)}
-          onChanged={() => setEngineTick((n) => n + 1)}
-        />
-      )}
     </>
   );
 }

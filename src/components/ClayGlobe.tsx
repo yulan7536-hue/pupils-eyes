@@ -32,6 +32,26 @@ function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector
   );
 }
 
+/** 俯仰角：把北半球抬进画面中心一带（看起来像"从赤道略高处看地球"），但绝不翻滚球体 */
+const TILT = (20 * Math.PI) / 180;
+
+/**
+ * 让某个经纬度正对镜头，且「北始终朝上、东始终朝右」。
+ *
+ * 不能用 setFromUnitVectors：它会走最短弧，球会沿着视线轴任意翻滚，
+ * 于是北京可能被转到安吉的右下方——方位看起来全错。
+ * 这里拆成两步：先绕 Y 轴转到目标经度，再绕 X 轴抬头 TILT，
+ * 只有偏航和俯仰、没有翻滚，所以所有图钉的相对方位与真实地理一致。
+ */
+function orientTo(lat: number, lon: number): THREE.Quaternion {
+  const yaw = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    (-(90 + lon) * Math.PI) / 180
+  );
+  const pitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), TILT);
+  return pitch.multiply(yaw);
+}
+
 export default function ClayGlobe({
   pins,
   size,
@@ -127,11 +147,8 @@ export default function ClayGlobe({
     scene.add(bounce);
 
     const globe = new THREE.Group();
-    // 初始把中国区域转向镜头（东经 105°，北纬 35°）
-    globe.quaternion.setFromUnitVectors(
-      latLonToVector3(35, 105, 1).normalize(),
-      new THREE.Vector3(0, 0.18, 1).normalize()
-    );
+    // 初始把中国区域转向镜头（东经 105°，北纬 35°），北朝上、东朝右
+    globe.quaternion.copy(orientTo(35, 105));
     scene.add(globe);
     globeRef.current = globe;
 
@@ -317,7 +334,7 @@ export default function ClayGlobe({
       } else if (!dragging && globeRef.current && acc >= STEP) {
         acc = 0;
         globeRef.current.quaternion.premultiply(
-          new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.0042)
+          new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.0026)
         );
       }
 
@@ -392,11 +409,13 @@ export default function ClayGlobe({
   /* ---------------- 视角对齐到某个坐标 ---------------- */
   useEffect(() => {
     if (!activeTargetCoord || !globeRef.current) return;
-    const from = latLonToVector3(activeTargetCoord.lat, activeTargetCoord.lon, 1).normalize();
-    targetQuatRef.current = new THREE.Quaternion().setFromUnitVectors(
-      from,
-      new THREE.Vector3(0, 0.18, 1).normalize()
-    );
+    const { lat, lon } = activeTargetCoord;
+    // 目标已经在正面：不转球。落钉就该落在它真实的位置上（北京在安吉北边），
+    // 一转就把所有钉子挤到圆心，看起来"位置从来没变过"。
+    const world = latLonToVector3(lat, lon, 1).applyQuaternion(globeRef.current.quaternion);
+    if (world.z > 0.5) return;
+    // 只有落在背面（比如南北美洲）才转过去，且只做偏航，不翻滚
+    targetQuatRef.current = orientTo(lat, lon);
     targetingRef.current = true;
   }, [activeTargetCoord]);
 
@@ -435,7 +454,7 @@ export default function ClayGlobe({
       const palette = [0xf2e7cb, 0x8fae5e, 0xa8d4ba];
       const color = pin.role === 'TEACHER' ? 0xd4796f : palette[i % 3];
 
-      const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.09, 2), headMat(color));
+      const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.105, 2), headMat(color));
       head.position.z = 0.115;
       head.userData.pin = pin;
       node.add(head);

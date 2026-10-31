@@ -61,11 +61,6 @@ export default function WorkSheet({ work, onClose, onLike, onComment }: WorkShee
             <div className="radar-wrap">
               <div className="radar-wrap__head">
                 <span className="radar-wrap__title">教案六维智能雷达图</span>
-                <span className="radar-wrap__tag tnum">
-                  {work.radar.source === 'ai'
-                    ? `${work.radar.model ?? 'AI'}${work.radar.latencyMs ? ` · ${(work.radar.latencyMs / 1000).toFixed(1)}s` : ''}`
-                    : '规则引擎'}
-                </span>
               </div>
               <RadarChart analysis={work.radar} />
             </div>
