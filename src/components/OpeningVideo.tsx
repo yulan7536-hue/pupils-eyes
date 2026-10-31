@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Volume2, VolumeX, FastForward, Upload, Play, Pause, Sparkles } from 'lucide-react';
+import { Volume2, VolumeX, FastForward } from 'lucide-react';
 import { storySound } from '../utils/sound';
 
 interface OpeningVideoProps {
@@ -8,356 +8,131 @@ interface OpeningVideoProps {
 
 export default function OpeningVideo({ onComplete }: OpeningVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [hasVideoFile, setHasVideoFile] = useState<boolean>(true);
-  const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(true);
-  const [customVideoSrc, setCustomVideoSrc] = useState<string | null>(null);
-  const [progress, setProgress] = useState<number>(0);
-  const [durationSec] = useState<number>(8.5);
+  const [secondsElapsed, setSecondsElapsed] = useState<number>(0);
+  const [isFadingOut, setIsFadingOut] = useState<boolean>(false);
+  const completedRef = useRef<boolean>(false);
 
-  // 当没有检测到本地视频文件时，启动程序化手绘水彩画卷定格动画
+  // 用户上传的真实开幕视频路径
+  const videoSrc = '/assets/aistudio/video_3ea63c78.mp4';
+  const TOTAL_DURATION = 10; // 必须完整保留 10 秒流程
+
+  const triggerComplete = () => {
+    if (completedRef.current) return;
+    completedRef.current = true;
+    setIsFadingOut(true);
+    setTimeout(() => {
+      onComplete();
+    }, 700);
+  };
+
   useEffect(() => {
-    if (hasVideoFile && !customVideoSrc) {
-      // 尝试探测 /opening.mp4 是否可访问
-      const testVideo = document.createElement('video');
-      testVideo.src = '/opening.mp4';
-      testVideo.oncanplay = () => {
-        setHasVideoFile(true);
-      };
-      testVideo.onerror = () => {
-        setHasVideoFile(false);
-      };
+    const video = videoRef.current;
+    if (video) {
+      video.currentTime = 0;
+      video.play().catch(() => {
+        // 自动播放策略保护
+      });
     }
-  }, [hasVideoFile, customVideoSrc]);
 
-  // 纯 Canvas 手绘立体书动画（小男孩戴着红围巾在林荫校舍间欢快奔跑）
-  useEffect(() => {
-    if (hasVideoFile && customVideoSrc) return;
-    if (hasVideoFile && videoRef.current && !videoRef.current.error) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animId = 0;
-    let startTime = performance.now();
-
-    const drawStorybookFrame = (now: number) => {
-      const elapsed = (now - startTime) / 1000;
-      const t = elapsed % durationSec;
-      const progressRatio = Math.min(elapsed / durationSec, 1);
-      setProgress(progressRatio * 100);
-
-      const w = canvas.width;
-      const h = canvas.height;
-
-      // 1. 底色：柔和旧羊皮纸水彩漫染
-      ctx.fillStyle = '#FAF7EE';
-      ctx.fillRect(0, 0, w, h);
-
-      // 2. 纸张颗粒感
-      ctx.fillStyle = 'rgba(26, 51, 32, 0.03)';
-      for (let i = 0; i < 40; i++) {
-        const rx = (Math.sin(i * 99 + t) * 0.5 + 0.5) * w;
-        const ry = (Math.cos(i * 33 + t) * 0.5 + 0.5) * h;
-        ctx.fillRect(rx, ry, 2, 2);
-      }
-
-      // 3. 背景手绘校舍廊柱与拱门（定格手绘自然画风）
-      ctx.strokeStyle = '#2D4A34';
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = 'round';
-
-      // 地平线木质走廊地板
-      const groundY = h * 0.72;
-      ctx.beginPath();
-      ctx.moveTo(w * 0.05, groundY);
-      ctx.lineTo(w * 0.95, groundY);
-      ctx.stroke();
-
-      // 拱廊立柱（随奔跑视差向后流动）
-      const offset = (t * 140) % 220;
-      for (let x = -100 + offset; x < w + 200; x += 220) {
-        // 立柱
-        ctx.fillStyle = 'rgba(235, 240, 230, 0.9)';
-        ctx.fillRect(x - 14, groundY - 180, 28, 180);
-        ctx.strokeRect(x - 14, groundY - 180, 28, 180);
-
-        // 拱门顶部
-        ctx.beginPath();
-        ctx.arc(x, groundY - 180, 45, Math.PI, 0, false);
-        ctx.stroke();
-
-        // 垂挂的小绿藤蔓与绿叶
-        ctx.fillStyle = '#52796F';
-        for (let j = 0; j < 5; j++) {
-          const vy = groundY - 160 + j * 16 + Math.sin(t * 3 + j) * 4;
-          const vx = x + Math.sin(j * 2) * 12;
-          ctx.beginPath();
-          ctx.ellipse(vx, vy, 6, 3, Math.PI / 4, 0, Math.PI * 2);
-          ctx.fill();
+    // 严谨的 10 秒播放计时控制
+    const interval = setInterval(() => {
+      setSecondsElapsed((prev) => {
+        const next = prev + 0.1;
+        if (next >= TOTAL_DURATION) {
+          clearInterval(interval);
+          triggerComplete();
+          return TOTAL_DURATION;
         }
-      }
+        return next;
+      });
+    }, 100);
 
-      // 4. 温暖的晨曦金光束从拱廊洒入
-      const gradient = ctx.createLinearGradient(w * 0.3, 0, w * 0.7, groundY);
-      gradient.addColorStop(0, 'rgba(255, 222, 89, 0.35)');
-      gradient.addColorStop(0.8, 'rgba(255, 222, 89, 0.08)');
-      gradient.addColorStop(1, 'rgba(255, 222, 89, 0)');
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.moveTo(w * 0.2, 0);
-      ctx.lineTo(w * 0.9, groundY);
-      ctx.lineTo(w * 0.5, groundY);
-      ctx.lineTo(w * 0.05, 0);
-      ctx.closePath();
-      ctx.fill();
-
-      // 5. 核心主角：奔跑的小男孩（手绘定格风格）
-      const boyX = w * 0.45;
-      const bounce = Math.abs(Math.sin(t * 12)) * 14;
-      const boyY = groundY - 60 - bounce;
-
-      // 脚步扬起的草叶与轻烟
-      ctx.fillStyle = 'rgba(133, 169, 143, 0.4)';
-      for (let p = 0; p < 4; p++) {
-        const dustX = boyX - 25 - p * 8 + Math.sin(t * 20 + p) * 5;
-        const dustY = groundY - 5 - p * 3;
-        ctx.beginPath();
-        ctx.arc(dustX, dustY, 3 + p, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // 影子（定格黏土扁椭圆）
-      ctx.fillStyle = 'rgba(26, 51, 32, 0.25)';
-      ctx.beginPath();
-      ctx.ellipse(boyX, groundY - 2, 22 - bounce * 0.3, 6, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 双腿（定格交替跑步）
-      const legPhase = Math.sin(t * 12);
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = '#1A3320';
-
-      // 左腿
-      ctx.beginPath();
-      ctx.moveTo(boyX - 4, boyY + 36);
-      ctx.lineTo(boyX - 4 + legPhase * 16, boyY + 60);
-      ctx.stroke();
-
-      // 右腿
-      ctx.beginPath();
-      ctx.moveTo(boyX + 4, boyY + 36);
-      ctx.lineTo(boyX + 4 - legPhase * 16, boyY + 60);
-      ctx.stroke();
-
-      // 上衣（温暖浅绿与米白相间的手工小衫）
-      ctx.fillStyle = '#85A98F';
-      ctx.beginPath();
-      ctx.roundRect(boyX - 14, boyY + 12, 28, 28, 6);
-      ctx.fill();
-      ctx.stroke();
-
-      // 小脑袋
-      ctx.fillStyle = '#F5DEB3';
-      ctx.beginPath();
-      ctx.arc(boyX, boyY, 14, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // 蓬松深褐色头发
-      ctx.fillStyle = '#5A3825';
-      ctx.beginPath();
-      ctx.arc(boyX - 2, boyY - 4, 15, Math.PI * 0.8, Math.PI * 2.2);
-      ctx.fill();
-
-      // 奔跑中迎风飘扬的红围巾
-      ctx.fillStyle = '#D64545';
-      ctx.strokeStyle = '#8B0000';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      // 脖子处结
-      ctx.ellipse(boyX - 1, boyY + 12, 10, 5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // 随风向后剧烈飘拂的长围巾尾
-      ctx.beginPath();
-      ctx.moveTo(boyX - 8, boyY + 12);
-      const wave1 = Math.sin(t * 16) * 12;
-      const wave2 = Math.cos(t * 16) * 14;
-      ctx.quadraticCurveTo(boyX - 35, boyY + 12 + wave1, boyX - 65, boyY + 6 + wave2);
-      ctx.lineTo(boyX - 60, boyY + 16 + wave2);
-      ctx.quadraticCurveTo(boyX - 30, boyY + 19 + wave1, boyX - 4, boyY + 16);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // 6. 前景绿植拱廊剪影
-      ctx.fillStyle = '#1A3320';
-      ctx.beginPath();
-      ctx.arc(w * 0.9, groundY - 80, 70, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 如果动画达到尾声，自动转场到藤蔓大门
-      if (elapsed >= durationSec) {
-        storySound.playPaperTurn();
-        onComplete();
-        return;
-      }
-
-      animId = requestAnimationFrame(drawStorybookFrame);
+    return () => {
+      clearInterval(interval);
     };
-
-    animId = requestAnimationFrame(drawStorybookFrame);
-    return () => cancelAnimationFrame(animId);
-  }, [hasVideoFile, customVideoSrc, durationSec, onComplete]);
-
-  // 处理用户上传自己的本地视频
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setCustomVideoSrc(url);
-      setHasVideoFile(true);
-      storySound.playPaperTurn();
-    }
-  };
-
-  const handleSkip = () => {
-    storySound.playPaperTurn();
-    onComplete();
-  };
+  }, []);
 
   const toggleSound = () => {
+    const video = videoRef.current;
+    if (!video) return;
     const nextMuted = !isMuted;
+    video.muted = nextMuted;
     setIsMuted(nextMuted);
     storySound.setMuted(nextMuted);
-    if (videoRef.current) {
-      videoRef.current.muted = nextMuted;
-    }
     if (!nextMuted) {
       storySound.playChime();
     }
   };
 
+  const handleSkip = () => {
+    triggerComplete();
+  };
+
+  const progressPercent = Math.min(100, (secondsElapsed / TOTAL_DURATION) * 100);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-[#EAEFE6] select-none">
-      {/* 软陶泥定格立体画相框 */}
-      <div className="relative w-full max-w-4xl aspect-[16/9] clay-card flex flex-col justify-between p-5 md:p-7 overflow-hidden shadow-2xl">
-        
-        {/* 顶部陶土标签 */}
-        <div className="flex items-center justify-between border-b-2 border-[#1E3824]/15 pb-3">
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl">📖</span>
-            <div>
-              <h2 className="text-sm md:text-base font-black text-[#1E3824] tracking-wide font-serif">
-                序章 · 翻开定格立体书
-              </h2>
-              <p className="text-[11px] text-[#52796F] font-bold">
-                红围巾少年奔向校舍绿廊，藤蔓门后藏着星空与陶土的秘密
-              </p>
-            </div>
+    <div
+      className={`fixed inset-0 z-50 bg-[#000000] flex items-center justify-center overflow-hidden select-none transition-opacity duration-700 ${
+        isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
+      }`}
+    >
+      {/* 铺满全屏的高清开场视频 */}
+      <div className="absolute inset-0 w-full h-full">
+        <video
+          ref={videoRef}
+          src={videoSrc}
+          autoPlay
+          playsInline
+          muted={isMuted}
+          className="w-full h-full object-cover"
+        />
+      </div>
+
+      {/* 柔和暗角晕映，方便顺滑渐入阶段 2 全黑屏幕 */}
+      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,_transparent_50%,_rgba(0,0,0,0.4)_100%)]" />
+
+      {/* 顶部极简开幕章节文字 */}
+      <div className="absolute top-6 left-6 z-20 flex items-center gap-2.5 pointer-events-none">
+        <span className="w-2 h-2 rounded-full bg-white/80 animate-ping" />
+        <span className="text-xs font-serif font-medium tracking-widest text-white/90 drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
+          序章 · 童眼看世界
+        </span>
+      </div>
+
+      {/* 底部左侧：静音切换 */}
+      <div className="absolute bottom-6 left-6 z-20 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={toggleSound}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md text-white/80 hover:text-white text-xs transition-colors cursor-pointer"
+        >
+          {isMuted ? <VolumeX size={14} className="text-white/60" /> : <Volume2 size={14} className="text-[#81C784]" />}
+          <span>{isMuted ? '开音效' : '静音'}</span>
+        </button>
+
+        {/* 10秒微型进度指示条 */}
+        <div className="flex items-center gap-2 text-[10px] text-white/60 font-mono">
+          <div className="w-20 h-1 bg-white/20 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-white/90 transition-all duration-100 ease-linear"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
-
-          {/* 上传自定义视频入口 */}
-          <label className="clay-card hover:bg-[#FAF5E8] flex items-center gap-1.5 px-3 py-1 text-xs cursor-pointer transition-colors font-bold text-[#1E3824]">
-            <Upload size={13} className="text-[#6E9277]" />
-            <span className="hidden sm:inline">载入本地 MP4 视频</span>
-            <span className="sm:hidden">换视频</span>
-            <input 
-              type="file" 
-              accept="video/mp4,video/webm" 
-              onChange={handleFileUpload} 
-              className="hidden" 
-            />
-          </label>
+          <span>{Math.floor(secondsElapsed)}s / {TOTAL_DURATION}s</span>
         </div>
+      </div>
 
-        {/* 核心视窗：真视频播放器 或 纯手绘定格动画 Canvas */}
-        <div className="relative flex-1 my-3.5 rounded-xl overflow-hidden border-2 border-[#1E3824] bg-[#2E4D36]/10 flex items-center justify-center shadow-inner">
-          {customVideoSrc ? (
-            <video
-              ref={videoRef}
-              src={customVideoSrc}
-              autoPlay
-              playsInline
-              muted={isMuted}
-              onEnded={() => {
-                storySound.playPaperTurn();
-                onComplete();
-              }}
-              className="w-full h-full object-cover"
-            />
-          ) : hasVideoFile ? (
-            <video
-              ref={videoRef}
-              src="/opening.mp4"
-              autoPlay
-              playsInline
-              muted={isMuted}
-              onError={() => setHasVideoFile(false)}
-              onEnded={() => {
-                storySound.playPaperTurn();
-                onComplete();
-              }}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <canvas
-              ref={canvasRef}
-              width={960}
-              height={540}
-              className="w-full h-full object-cover"
-            />
-          )}
-
-          {/* 覆盖一层旧纸张纹理暗角 */}
-          <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#162B1C]/20 via-transparent to-[#162B1C]/10 mix-blend-multiply" />
-
-          {/* 动画标识 */}
-          <div className="absolute bottom-3 left-3 bg-[#FAF5E8]/95 border-2 border-[#1E3824] px-3 py-1 rounded-full text-[11px] text-[#1E3824] font-black flex items-center gap-1.5 shadow-xs">
-            <Sparkles size={13} className="text-[#E6B84A]" />
-            <span>{!hasVideoFile && !customVideoSrc ? '定格手绘立体画卷渲染中' : '沉浸式影像播映中'}</span>
-          </div>
-        </div>
-
-        {/* 底部控制台 */}
-        <div className="flex items-center justify-between pt-1">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={toggleSound}
-              className="clay-card px-3 py-1 text-xs text-[#1E3824] font-bold flex items-center gap-1.5 hover:bg-[#FAF5E8]"
-            >
-              {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} className="text-[#6E9277]" />}
-              <span>{isMuted ? '开启声音' : '静音'}</span>
-            </button>
-
-            {/* 播放进度指示 */}
-            <div className="hidden sm:flex items-center gap-2 text-xs text-[#52796F]">
-              <div className="w-24 h-2 bg-[#1E3824]/20 rounded-full overflow-hidden border border-[#1E3824]/40">
-                <div 
-                  className="h-full bg-[#6E9277] transition-all duration-200"
-                  style={{ width: `${progress}%` }} 
-                />
-              </div>
-              <span className="font-mono text-[11px] font-bold">8.5s 序章</span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSkip}
-            className="clay-btn px-5 py-2 text-xs md:text-sm font-black flex items-center gap-2"
-          >
-            <span>翻过此页，推开藤蔓门</span>
-            <FastForward size={14} />
-          </button>
-        </div>
-
+      {/* 角落保留一个不起眼的“跳过动画”小按钮供调试 */}
+      <div className="absolute bottom-6 right-6 z-20">
+        <button
+          type="button"
+          onClick={handleSkip}
+          className="group flex items-center gap-1.5 px-2.5 py-1 rounded bg-black/30 hover:bg-black/60 text-[11px] text-white/50 hover:text-white/90 transition-all cursor-pointer backdrop-blur-xs"
+        >
+          <span>跳过动画</span>
+          <FastForward size={11} className="group-hover:translate-x-0.5 transition-transform" />
+        </button>
       </div>
     </div>
   );

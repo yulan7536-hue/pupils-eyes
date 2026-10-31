@@ -1,6 +1,6 @@
 {
-  "name": "童眼看世界 · 泥塑自然星体与师生共创空间",
-  "description": "纸质立体书与定格泥塑手绘美学教育展示网站，包含藤蔓之门穿透动画、全景3D泥塑地球、精确到县的填空级联选择与师生分流成果画卷。",
+  "name": "童眼看世界 · 行智开物 成果展示",
+  "description": "童眼看世界 · 行智开物 成果展示平台：10秒开场动画、全黑追光白光转场、魔法草坪课桌、自转3D黏土地球仪及师生课题分流上传。",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

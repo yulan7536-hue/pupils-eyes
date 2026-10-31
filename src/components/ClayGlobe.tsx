@@ -28,6 +28,8 @@ interface ClayGlobeProps {
   selectedPin?: PinItem | null;
   activeTargetCoord?: { lat: number; lon: number } | null;
   newlyDroppedPinId?: string | null;
+  isZoomed?: boolean;
+  onToggleZoom?: () => void;
 }
 
 // 经纬度转换到 3D 球体局部坐标
@@ -48,30 +50,26 @@ function createPinLabelTexture(cityName: string, title: string, isTeacher: boole
   const ctx = canvas.getContext('2d');
 
   if (ctx) {
-    // 粗糙撕纸底色
-    ctx.fillStyle = '#FAF5E8';
-    ctx.strokeStyle = '#1E3824';
-    ctx.lineWidth = 3.5;
-
+    // 纯净温润宣纸色，无生硬黑线描边
+    ctx.fillStyle = '#FAF8F0';
     ctx.beginPath();
-    ctx.roundRect(6, 6, 244, 72, 8);
+    ctx.roundRect(6, 6, 244, 72, 10);
     ctx.fill();
-    ctx.stroke();
 
-    // 顶部黏土贴胶
-    ctx.fillStyle = isTeacher ? '#D47A6A' : '#6E9277';
-    ctx.fillRect(16, 2, 50, 10);
+    // 顶部温润色块分类
+    ctx.fillStyle = isTeacher ? '#DE6D56' : '#327346';
+    ctx.fillRect(16, 6, 44, 6);
 
     // 城市文字
-    ctx.fillStyle = '#1E3824';
+    ctx.fillStyle = '#122818';
     ctx.font = 'bold 22px "Noto Serif SC", serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     const displayCity = cityName.split('·').pop() || cityName;
     ctx.fillText(`📍 ${displayCity}`, 18, 36);
 
-    ctx.fillStyle = '#52796F';
-    ctx.font = '15px "Noto Serif SC", serif';
+    ctx.fillStyle = '#3B6647';
+    ctx.font = '500 15px "Noto Serif SC", serif';
     const shortTitle = title.length > 9 ? title.slice(0, 9) + '...' : title;
     ctx.fillText(shortTitle, 20, 60);
   }
@@ -87,6 +85,8 @@ export default function ClayGlobe({
   selectedPin,
   activeTargetCoord,
   newlyDroppedPinId,
+  isZoomed = false,
+  onToggleZoom,
 }: ClayGlobeProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const [hoveredPin, setHoveredPin] = useState<{ pin: PinItem; x: number; y: number } | null>(null);
@@ -99,6 +99,16 @@ export default function ClayGlobe({
   const pinsGroupRef = useRef<THREE.Group | null>(null);
   const ripplesGroupRef = useRef<THREE.Group | null>(null);
   const selectedPinRef = useRef<PinItem | null>(null);
+  const isZoomedRef = useRef<boolean>(isZoomed);
+  const onToggleZoomRef = useRef(onToggleZoom);
+
+  useEffect(() => {
+    isZoomedRef.current = isZoomed;
+  }, [isZoomed]);
+
+  useEffect(() => {
+    onToggleZoomRef.current = onToggleZoom;
+  }, [onToggleZoom]);
 
   // 同步选中的图钉引用用于相机推拉镜头动效（学习参考视频的聚焦拉近体验）
   useEffect(() => {
@@ -160,20 +170,20 @@ export default function ClayGlobe({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMappingExposure = 1.32;
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // 1. 定格动画影棚温暖灯光 RIG（3200K 白炽暖光 Key Light + 抹茶绿漫射 Fill Light）
-    const ambientLight = new THREE.AmbientLight(0xfff5e6, 1.35);
+    // 1. 定格动画影棚明亮艺术灯光 RIG（纯净透亮 Key Light + 翡翠玉色漫射 Fill Light）
+    const ambientLight = new THREE.AmbientLight(0xfffdf5, 1.7);
     scene.add(ambientLight);
 
-    const keyLight = new THREE.DirectionalLight(0xfff0d0, 2.4);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.9);
     keyLight.position.set(4.5, 6.0, 4.2);
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0x7fa389, 1.1);
+    const fillLight = new THREE.DirectionalLight(0x9bd8ac, 1.3);
     fillLight.position.set(-4.5, -2.5, -3.2);
     scene.add(fillLight);
 
@@ -211,14 +221,14 @@ export default function ClayGlobe({
       map: clayAlbedo,
       normalMap: clayNormal,
       normalScale: new THREE.Vector2(0.85, 0.85),
-      roughness: 0.86,
-      metalness: 0.03,
+      roughness: 0.82,
+      metalness: 0.02,
     });
     const earthMesh = new THREE.Mesh(earthGeom, earthMat);
     globeGroup.add(earthMesh);
 
     // 4. 定格大陆板块厚切泥片 (Clay Cutout Continents)
-    // 中国区域厚切陶土块（像用擀面杖压扁切好的厚泥片贴在球体上）
+    // 中国区域厚切陶土块（明亮青瓷抹茶软陶泥）
     const chinaCenter = latLonToVector3(35, 105, earthRadius + 0.03);
     const chinaGroup = new THREE.Group();
     chinaGroup.position.copy(chinaCenter);
@@ -227,8 +237,8 @@ export default function ClayGlobe({
     // 厚泥片大陆边缘
     const slabGeom = new THREE.CylinderGeometry(0.78, 0.82, 0.04, 32);
     const slabMat = new THREE.MeshStandardMaterial({
-      color: 0x98B99D, // 浅抹茶黄泥
-      roughness: 0.82,
+      color: 0xADD3AB, // 清亮温润青瓷玉色
+      roughness: 0.78,
       metalness: 0.02,
     });
     const chinaSlab = new THREE.Mesh(slabGeom, slabMat);
@@ -238,9 +248,9 @@ export default function ClayGlobe({
     // 金黄色温暖漫射光晕
     const glowCircleGeom = new THREE.RingGeometry(0.76, 1.05, 32);
     const glowCircleMat = new THREE.MeshBasicMaterial({
-      color: 0xE6B84A,
+      color: 0xF2C338,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.38,
       side: THREE.DoubleSide,
     });
     const glowCircle = new THREE.Mesh(glowCircleGeom, glowCircleMat);
@@ -408,7 +418,17 @@ export default function ClayGlobe({
           if (hitMesh.userData.pinData) {
             storySound.playPinDrop();
             onSelectPin(hitMesh.userData.pinData);
+            return;
           }
+        }
+      }
+
+      // 若点击的是地球仪主体且非拖拽，触发点击放大 / 缩回课桌
+      if (globeGroupRef.current) {
+        const globeIntersects = raycaster.intersectObjects(globeGroupRef.current.children, true);
+        if (globeIntersects.length > 0) {
+          storySound.playPaperTurn();
+          onToggleZoomRef.current?.();
         }
       }
     };
@@ -522,8 +542,9 @@ export default function ClayGlobe({
         }
       }
 
-      // 学习参考视频的镜头聚焦推进动效：点击图钉时相机顺滑推进，关闭时拉远恢复全景
-      const targetZ = selectedPinRef.current ? 4.35 : 5.4;
+      // 点击放大模式下相机顺滑推近到 3.55，清晰展示图钉自转；选中图钉聚焦至 3.1
+      const baseZ = isZoomedRef.current ? 3.55 : 5.4;
+      const targetZ = selectedPinRef.current ? 3.1 : baseZ;
       camera.position.z = THREE.MathUtils.damp(camera.position.z, targetZ, 3.2, delta);
 
       renderer.render(scene, camera);
@@ -666,28 +687,47 @@ export default function ClayGlobe({
         className="w-full h-full cursor-grab active:cursor-grabbing" 
       />
 
-      {/* 悬停微卡片提示 */}
+      {/* 悬停提示：图钉悬停（Hover）显示：“童眼看 [具体地方名称]” */}
       {hoveredPin && (
         <div
           className="absolute z-30 pointer-events-none transform -translate-x-1/2 -translate-y-full mb-3"
           style={{ left: `${hoveredPin.x}px`, top: `${hoveredPin.y - 14}px` }}
         >
-          <div className="clay-card px-4 py-2.5 flex items-center gap-2.5 whitespace-nowrap shadow-2xl">
-            <span className="text-xl">📍</span>
-            <div>
-              <div className="font-bold text-sm text-[#1E3824]">{hoveredPin.pin.city}</div>
-              <div className="text-[#52796F] text-xs font-serif">{hoveredPin.pin.name}</div>
+          <div className="bg-[#FAF8F0]/95 backdrop-blur-md px-4 py-2 rounded-full flex items-center gap-2 whitespace-nowrap shadow-xl border border-[#122818]/10 animate-in fade-in zoom-in-95 duration-150">
+            <span className="text-sm">📍</span>
+            <div className="flex flex-col">
+              <span className="font-black text-xs md:text-sm text-[#122818] tracking-wide">
+                童眼看 {hoveredPin.pin.city.split('·').slice(1).join(' · ') || hoveredPin.pin.city}
+              </span>
+              <span className="text-[#3B6647] text-[10px] font-serif truncate max-w-[180px]">
+                {hoveredPin.pin.name}
+              </span>
             </div>
           </div>
         </div>
       )}
 
-      {/* 底部黏土印章互动指引徽章（学习参考视频：置于底部中央，保证中央 3D 球体 100% 无任何遮挡） */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex items-center gap-2 clay-card px-4 py-1.5 text-xs text-[#52796F] whitespace-nowrap shadow-md">
-        <span className="text-sm">🖐️</span>
-        <span className="font-bold text-[#1E3824]">拖拽旋转定格黏土星球</span>
-        <span>·</span>
-        <span>📍 轻触图钉推进视角</span>
+      {/* 顶部中央互动指引与放大状态提示 */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3">
+        {isZoomed ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleZoomRef.current?.();
+            }}
+            className="px-4 py-1.5 rounded-full bg-white/90 hover:bg-white text-xs font-bold text-[#122818] shadow-md border border-[#122818]/10 flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105"
+          >
+            <span>🔍 还原课桌远景</span>
+            <span className="text-[10px] text-[#3B6647]">（点击缩小）</span>
+          </button>
+        ) : (
+          <div className="pointer-events-none px-3 py-1 rounded-full bg-white/60 backdrop-blur-xs text-[11px] text-[#3B6647] font-medium flex items-center gap-2">
+            <span>🖐️ 自由旋转</span>
+            <span className="opacity-40">·</span>
+            <span>🔍 点击地球仪放大屏幕中央</span>
+          </div>
+        )}
       </div>
     </div>
   );

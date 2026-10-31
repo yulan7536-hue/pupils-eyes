@@ -2,13 +2,14 @@
 
 @layer base {
   :root {
-    --clay-cream: #FAF5E8;
-    --clay-green: #6E9277;
-    --clay-forest: #2D4A34;
-    --clay-shadow: #15291B;
-    --clay-terracotta: #D47A6A;
-    --clay-ochre: #E6B84A;
-    --clay-soft-bg: #EAEFE6;
+    --clay-cream: #FFFFFF;
+    --clay-green: #327346;
+    --clay-forest: #162E1D;
+    --clay-shadow: #122818;
+    --clay-terracotta: #DE6D56;
+    --clay-ochre: #F2C338;
+    --clay-soft-bg: #F5F8F2;
+    --clay-border: rgba(34, 66, 42, 0.12);
   }
 
   body {
@@ -18,111 +19,96 @@
   }
 }
 
-/* 纸浆与黏土微质感颗粒背景 */
+/* 纸浆与温润艺术纸微质感背景（明亮、通透的高端画廊级纸张） */
 .paper-bg {
-  background-color: #EAEFE6;
+  background-color: #F5F8F2;
   background-image: 
-    radial-gradient(#15291B 0.65px, transparent 0.65px), 
-    radial-gradient(#477051 0.45px, #EAEFE6 0.45px);
-  background-size: 20px 20px;
-  background-position: 0 0, 10px 10px;
+    radial-gradient(#1A3822 0.35px, transparent 0.35px), 
+    radial-gradient(#5C996B 0.25px, #F5F8F2 0.25px);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
 }
 
-/* 物理软陶泥卡片 (Clay Slab) - 带有上下高光与泥土厚度阴影 */
+/* 无边框、无阴影、依托自然留白与字阶对比的纯粹自然质感 */
 .clay-card {
-  background-color: #FAF5E8;
-  border-radius: 24px 8px 22px 9px / 9px 22px 8px 24px;
-  border: 3px solid #1E3824;
-  box-shadow: 
-    inset 2.5px 2.5px 0px 0px rgba(255, 255, 255, 0.95),
-    inset -3px -3px 0px 0px rgba(21, 41, 27, 0.12),
-    4px 5px 0px 0px #1E3824;
+  background-color: transparent;
+  border-radius: 12px;
   position: relative;
 }
 
-/* 浓郁抹茶绿陶土卡片 */
+/* 浓郁青翠纯色块 */
 .clay-card-green {
-  background-color: #7FA389;
-  border-radius: 20px 8px 22px 10px / 10px 22px 8px 20px;
-  border: 3px solid #162B1C;
-  color: #FAF5E8;
-  box-shadow: 
-    inset 2px 2px 0px 0px rgba(255, 255, 255, 0.45),
-    inset -3px -3px 0px 0px rgba(0, 0, 0, 0.25),
-    4px 5px 0px 0px #162B1C;
+  background-color: #2F6941;
+  border-radius: 12px;
+  color: #FFFFFF;
 }
 
-/* 物理手捏软陶泥按钮 (Clay Button) */
+/* 触感自然的有机温润按钮 (严格无边框、无阴影) */
 .clay-btn {
-  background-color: #6E9277;
-  color: #FAF5E8;
-  border: 2.5px solid #162B1C;
-  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
-  box-shadow: 
-    inset 2px 2px 0px 0px rgba(255, 255, 255, 0.65),
-    inset -2.5px -2.5px 0px 0px rgba(0, 0, 0, 0.28),
-    3px 4px 0px 0px #162B1C;
-  transition: transform 0.08s steps(2), box-shadow 0.08s steps(2);
+  background-color: #2F6B3F;
+  color: #FFFFFF;
+  border-radius: 9999px;
+  border: none;
+  box-shadow: none;
+  transition: all 0.2s ease-out;
   cursor: pointer;
 }
 
 .clay-btn:hover {
-  background-color: #5D8066;
-  transform: translate(-1px, -1px);
-  box-shadow: 
-    inset 2.5px 2.5px 0px 0px rgba(255, 255, 255, 0.75),
-    inset -3px -3px 0px 0px rgba(0, 0, 0, 0.32),
-    4px 5px 0px 0px #162B1C;
+  background-color: #235431;
+  transform: translateY(-1px);
 }
 
 .clay-btn:active {
-  transform: translate(3px, 3px);
-  box-shadow: 
-    inset 1px 1px 0px 0px rgba(255, 255, 255, 0.3),
-    inset -1px -1px 0px 0px rgba(0, 0, 0, 0.3),
-    0px 1px 0px 0px #162B1C;
+  transform: translateY(1px);
 }
 
-/* 陶土赤色印章按钮 */
+/* 陶土赤色印章按钮 (无边框、无阴影) */
 .clay-btn-terracotta {
-  background-color: #D47A6A;
-  color: #FAF5E8;
-  border: 2.5px solid #162B1C;
-  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
-  box-shadow: 
-    inset 2px 2px 0px 0px rgba(255, 255, 255, 0.7),
-    inset -2.5px -2.5px 0px 0px rgba(0, 0, 0, 0.3),
-    3px 4px 0px 0px #162B1C;
+  background-color: #D6634C;
+  color: #FFFFFF;
+  border-radius: 9999px;
+  border: none;
+  box-shadow: none;
+  transition: all 0.2s ease-out;
+  cursor: pointer;
 }
+
+.clay-btn-terracotta:hover {
+  background-color: #BE523C;
+  transform: translateY(-1px);
+}
+
 .clay-btn-terracotta:active {
-  transform: translate(3px, 3px);
-  box-shadow: 0px 1px 0px 0px #162B1C;
+  transform: translateY(1px);
 }
 
-/* 凹陷黏土输入框 (Clay Inset) */
+/* 极简无边框输入框 (柔和纯粹底色，依靠留白与焦点过渡) */
 .clay-input {
-  background-color: #FFFFFF;
-  border: 2.5px solid #1E3824;
-  border-radius: 12px;
-  box-shadow: 
-    inset 2px 2px 4px rgba(26, 51, 32, 0.16),
-    inset -1px -1px 2px rgba(255, 255, 255, 0.8);
+  background-color: #EBF1E7;
+  border: none;
+  border-radius: 10px;
+  box-shadow: none;
+  transition: background-color 0.2s ease;
 }
 
-/* 手工指纹黏土徽章 */
+.clay-input:focus {
+  background-color: #FFFFFF;
+  outline: 2px solid #2F6B3F;
+}
+
+/* 极简纯字徽章 (无边框、无阴影) */
 .clay-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.25rem 0.65rem;
-  background-color: #FAF5E8;
-  border: 2px solid #1E3824;
-  border-radius: 20px;
-  box-shadow: 
-    inset 1.5px 1.5px 0px rgba(255, 255, 255, 0.9),
-    1.5px 2px 0px #1E3824;
+  padding: 0.25rem 0.6rem;
+  background-color: #EBF1E7;
+  border-radius: 9999px;
   font-weight: 700;
   font-size: 0.75rem;
+  border: none;
+  box-shadow: none;
 }
 
 /* 定格动画 12 FPS 抽帧抖动感 */
@@ -139,26 +125,7 @@
   animation: stop-motion-shake 3.5s steps(5, end) infinite;
 }
 
-/* 便签和纸胶带 */
-.clay-tape {
-  position: relative;
-}
-.clay-tape::before {
-  content: '';
-  position: absolute;
-  top: -9px;
-  left: 50%;
-  transform: translateX(-50%) rotate(-1.5deg);
-  width: 75px;
-  height: 18px;
-  background-color: rgba(246, 230, 186, 0.85);
-  border: 1px dashed rgba(26, 51, 32, 0.35);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
-  pointer-events: none;
-  z-index: 10;
-}
-
-/* 趣味字体 */
+/* 趣味手写字体 */
 .font-handwriting {
   font-family: 'ZCOOL KuaiLe', 'Caveat', cursive, sans-serif;
 }

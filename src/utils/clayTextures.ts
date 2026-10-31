@@ -13,13 +13,13 @@ export function createClayAlbedoTexture(width = 1024, height = 512): THREE.Canva
   const ctx = canvas.getContext('2d');
 
   if (ctx) {
-    // 基础抹茶绿黏土地色
-    ctx.fillStyle = '#6E9277';
+    // 基础亮翡翠抹茶陶土地色（明亮、温润玉瓷陶质感）
+    ctx.fillStyle = '#78A885';
     ctx.fillRect(0, 0, width, height);
 
     // 揉入浅色软陶泥条纹（模拟两块不同深浅黏土揉捏在一起的效果）
     for (let i = 0; i < 45; i++) {
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(155, 191, 163, 0.22)' : 'rgba(82, 121, 111, 0.25)';
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(215, 240, 222, 0.38)' : 'rgba(92, 148, 110, 0.28)';
       ctx.beginPath();
       const sx = Math.random() * width;
       const sy = Math.random() * height;
@@ -29,7 +29,7 @@ export function createClayAlbedoTexture(width = 1024, height = 512): THREE.Canva
     }
 
     // 手工纸浆与微小纤维杂色点
-    ctx.fillStyle = 'rgba(250, 247, 238, 0.12)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
     for (let i = 0; i < 800; i++) {
       const px = Math.random() * width;
       const py = Math.random() * height;
