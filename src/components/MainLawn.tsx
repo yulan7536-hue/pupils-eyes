@@ -54,6 +54,30 @@ const MOTES = [
   { x: 7, y: 38, s: 0.8, d: 5 },
   { x: 47, y: 74, s: 0.55, d: 4.6 },
   { x: 78, y: 76, s: 0.6, d: 0.4 },
+  { x: 16, y: 30, s: 0.9, d: 2.8 },
+  { x: 36, y: 52, s: 0.7, d: 5.4 },
+  { x: 68, y: 25, s: 1.05, d: 1.9 },
+  { x: 89, y: 52, s: 0.75, d: 3.3 },
+  { x: 51, y: 22, s: 0.6, d: 6.1 },
+  { x: 26, y: 78, s: 0.5, d: 4.1 },
+];
+
+/** 背景里的大颗柔和 Bokeh 光斑：暖白/淡金，缓慢漂浮 */
+const BOKEH = [
+  { x: 8, y: 18, s: 2.6, d: 0 },
+  { x: 24, y: 12, s: 3.4, d: 2.2 },
+  { x: 44, y: 16, s: 2.2, d: 4.6 },
+  { x: 64, y: 10, s: 3.8, d: 1.4 },
+  { x: 82, y: 15, s: 2.8, d: 5.2 },
+  { x: 95, y: 24, s: 3.2, d: 2.8 },
+  { x: 14, y: 34, s: 2.4, d: 3.6 },
+  { x: 55, y: 30, s: 2.9, d: 0.9 },
+  { x: 74, y: 38, s: 2.3, d: 4.1 },
+  { x: 90, y: 44, s: 2.6, d: 2.4 },
+  { x: 33, y: 8, s: 2.5, d: 1.7 },
+  { x: 69, y: 52, s: 2.1, d: 3.4 },
+  { x: 5, y: 50, s: 2.7, d: 2.1 },
+  { x: 49, y: 60, s: 2.4, d: 5.6 },
 ];
 
 /** 草坪上的黏土小花：只放几处，给空场一点活气 */
@@ -83,7 +107,7 @@ function LawnDecor() {
             transform: 'translateX(-50%)',
           }}
         >
-          <path d="M20 52 C 20 40 20 32 20 24" stroke="#5f8f3d" strokeWidth="2.6" strokeLinecap="round" />
+          <path d="M20 52 C 20 40 20 32 20 24" stroke="#7cb356" strokeWidth="2.6" strokeLinecap="round" />
           {[0, 72, 144, 216, 288].map((deg) => (
             <ellipse key={deg} cx="20" cy="14" rx="5.2" ry="8" fill="#f8f3da" transform={`rotate(${deg} 20 20)`} />
           ))}
@@ -102,18 +126,31 @@ function BladeFringe() {
     <div className="lawn__blades" aria-hidden="true">
       {BLADE_H.map((h, i) => (
         <svg key={i} viewBox="0 0 24 100" style={{ height: `${h}%` }}>
-          <path d="M12 100 C 11 74 7 52 2 34 C 9 54 12 74 13 100 Z" fill="#6c9a45" />
-          <path d="M13 100 C 14 70 18 50 22 32 C 18 52 14 72 15 100 Z" fill="#7cad52" />
+          <path d="M12 100 C 11 74 7 52 2 34 C 9 54 12 74 13 100 Z" fill="#7cb356" />
+          <path d="M13 100 C 14 70 18 50 22 32 C 18 52 14 72 15 100 Z" fill="#93c86c" />
         </svg>
       ))}
     </div>
   );
 }
 
-/** 飘浮光点 */
+/** 飘浮光点 + 空气感 Bokeh 光斑 */
 function Fireflies() {
   return (
     <div className="motes" aria-hidden="true">
+      {BOKEH.map((m, i) => (
+        <span
+          key={`bk${i}`}
+          className="mote mote--bokeh"
+          style={{
+            left: `${m.x}%`,
+            top: `${m.y}%`,
+            width: `calc(var(--u) * ${1.6 * m.s})`,
+            height: `calc(var(--u) * ${1.6 * m.s})`,
+            animationDelay: `${-m.d}s`,
+          }}
+        />
+      ))}
       {MOTES.map((m, i) => (
         <span
           key={i}
@@ -134,13 +171,13 @@ function Fireflies() {
 function Tuft({ h }: { h: number }) {
   return (
     <svg viewBox="0 0 120 100" preserveAspectRatio="none" style={{ height: `${h}%` }} aria-hidden="true">
-      <path d="M62 100 C 58 66 48 42 26 22 C 50 40 60 66 64 100 Z" fill="#5b8a37" />
-      <path d="M64 100 C 62 58 56 34 40 8 C 58 32 65 60 68 100 Z" fill="#6d9d42" />
-      <path d="M66 100 C 68 62 76 38 96 18 C 80 44 71 70 70 100 Z" fill="#79aa4c" />
-      <path d="M60 100 C 54 70 42 54 18 44 C 42 56 57 74 62 100 Z" fill="#648f3c" />
-      <path d="M68 100 C 72 72 84 56 106 48 C 86 60 74 76 71 100 Z" fill="#6d9d42" />
-      <path d="M63 100 C 63 64 66 44 74 26 C 70 48 68 70 68 100 Z" fill="#82b254" />
-      <path d="M64 100 C 60 74 52 60 34 52 C 54 62 62 78 66 100 Z" fill="#548232" />
+      <path d="M62 100 C 58 66 48 42 26 22 C 50 40 60 66 64 100 Z" fill="#77b050" />
+      <path d="M64 100 C 62 58 56 34 40 8 C 58 32 65 60 68 100 Z" fill="#8ac361" />
+      <path d="M66 100 C 68 62 76 38 96 18 C 80 44 71 70 70 100 Z" fill="#9ad16d" />
+      <path d="M60 100 C 54 70 42 54 18 44 C 42 56 57 74 62 100 Z" fill="#82ba58" />
+      <path d="M68 100 C 72 72 84 56 106 48 C 86 60 74 76 71 100 Z" fill="#8ac361" />
+      <path d="M63 100 C 63 64 66 44 74 26 C 70 48 68 70 68 100 Z" fill="#a2d976" />
+      <path d="M64 100 C 60 74 52 60 34 52 C 54 62 62 78 66 100 Z" fill="#6fa548" />
     </svg>
   );
 }

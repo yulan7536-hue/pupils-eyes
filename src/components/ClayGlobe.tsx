@@ -106,23 +106,23 @@ export default function ClayGlobe({
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // 影棚光：暖主光 + 灰绿补光 + 背后轮廓光。强度刻意压低，否则泥面会曝掉
-    scene.add(new THREE.AmbientLight(0xfffaf0, 1.02));
+    // 影棚光：暖主光 + 天青补光 + 背后轮廓光（提亮，塑出温润通透的亮面软陶高光）
+    scene.add(new THREE.AmbientLight(0xfffbf2, 1.28));
 
-    const key = new THREE.DirectionalLight(0xfff6e6, 1.16);
+    const key = new THREE.DirectionalLight(0xfff7e8, 1.42);
     key.position.set(4.2, 5.6, 5.2);
     scene.add(key);
 
-    const fill = new THREE.DirectionalLight(0xd2e4d4, 0.62);
+    const fill = new THREE.DirectionalLight(0xd7ecf2, 0.78);
     fill.position.set(-5, -1.6, -3.4);
     scene.add(fill);
 
-    const rim = new THREE.DirectionalLight(0xffffff, 0.34);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.66);
     rim.position.set(-2.4, 3.2, -5);
     scene.add(rim);
 
     // 右下的暖反弹光，托住球的暗侧
-    const bounce = new THREE.DirectionalLight(0xffeedd, 0.3);
+    const bounce = new THREE.DirectionalLight(0xfff0e0, 0.42);
     bounce.position.set(4.5, -3.2, 2.4);
     scene.add(bounce);
 
@@ -155,9 +155,9 @@ export default function ClayGlobe({
     const mat = new THREE.MeshStandardMaterial({
       map: albedo,
       normalMap: normal,
-      normalScale: new THREE.Vector2(0.7, 0.7),
-      roughness: 0.88,
-      metalness: 0.02,
+      normalScale: new THREE.Vector2(0.62, 0.62),
+      roughness: 0.72,
+      metalness: 0.03,
     });
     globe.add(new THREE.Mesh(geom, mat));
 
@@ -166,14 +166,14 @@ export default function ClayGlobe({
     scene.add(baseGroup);
 
     const brassMat = new THREE.MeshStandardMaterial({
-      color: 0xc9a55f,
-      roughness: 0.42,
-      metalness: 0.55,
+      color: 0xe2c47e,
+      roughness: 0.34,
+      metalness: 0.62,
     });
     const brassDeep = new THREE.MeshStandardMaterial({
-      color: 0xa8833f,
-      roughness: 0.5,
-      metalness: 0.45,
+      color: 0xc39a55,
+      roughness: 0.42,
+      metalness: 0.5,
     });
 
     // 弧：绕球一圈多一点，开口朝左下，像参考插画里那道抱住球的金色带

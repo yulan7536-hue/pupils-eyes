@@ -45,21 +45,28 @@ const BLOBS: Blob[] = [
   { x: 82, y: 12, d: 22, hx: 42, hy: 32, tone: 1 },
 ];
 
-/** 冠沿上撒的奶油色小花：贴着冠的下缘长 */
-const FLOWERS = [
-  { x: 3, y: 26, s: 1 },
-  { x: 10, y: 30, s: 1.15 },
-  { x: 18, y: 25, s: 0.9 },
-  { x: 26, y: 17, s: 1 },
-  { x: 33, y: 9, s: 0.8 },
-  { x: 41, y: 4, s: 0.9 },
-  { x: 50, y: 3, s: 0.85 },
-  { x: 59, y: 5, s: 0.95 },
-  { x: 67, y: 8, s: 0.8 },
-  { x: 75, y: 14, s: 1 },
-  { x: 84, y: 23, s: 1.15 },
-  { x: 92, y: 27, s: 0.9 },
-  { x: 98, y: 19, s: 0.85 },
+/** 冠沿上撒的多瓣小花：奶油白 / 奶黄 / 浅樱花粉 / 淡雾蓝，贴着冠的下缘长 */
+const FLOWERS: { x: number; y: number; s: number; c: 'cream' | 'pink' | 'blue' | 'yellow' }[] = [
+  { x: 3, y: 26, s: 1, c: 'pink' },
+  { x: 10, y: 30, s: 1.15, c: 'cream' },
+  { x: 18, y: 25, s: 0.9, c: 'blue' },
+  { x: 26, y: 17, s: 1, c: 'yellow' },
+  { x: 33, y: 9, s: 0.8, c: 'pink' },
+  { x: 41, y: 4, s: 0.9, c: 'cream' },
+  { x: 50, y: 3, s: 0.85, c: 'blue' },
+  { x: 59, y: 5, s: 0.95, c: 'yellow' },
+  { x: 67, y: 8, s: 0.8, c: 'pink' },
+  { x: 75, y: 14, s: 1, c: 'cream' },
+  { x: 84, y: 23, s: 1.15, c: 'blue' },
+  { x: 92, y: 27, s: 0.9, c: 'pink' },
+  { x: 98, y: 19, s: 0.85, c: 'cream' },
+  { x: 7, y: 22, s: 0.75, c: 'yellow' },
+  { x: 15, y: 28, s: 0.7, c: 'blue' },
+  { x: 36, y: 6, s: 0.7, c: 'cream' },
+  { x: 47, y: 1, s: 0.72, c: 'pink' },
+  { x: 71, y: 11, s: 0.7, c: 'blue' },
+  { x: 88, y: 18, s: 0.72, c: 'yellow' },
+  { x: 96, y: 23, s: 0.7, c: 'pink' },
 ];
 
 /** 冠沿上的小黄花苞 */
@@ -100,11 +107,14 @@ const LEAVES = [
   { x: 100, y: 14, r: 32, s: 0.85, tone: 0 },
 ];
 
-const LEAF_FILL = ['#5c8745', '#6d9a51', '#80af60'] as const;
+const LEAF_FILL = ['#7fc05c', '#8fcd69', '#a5dd7e'] as const;
 
-const TONE_FILL = ['#5c8745', '#6d9a51', '#80af60'] as const;
+const TONE_FILL = ['#7fc05c', '#8fcd69', '#a5dd7e'] as const;
 
-function Flower({ s }: { s: number }) {
+function Flower({ s, c = 'cream' }: { s: number; c?: 'cream' | 'pink' | 'blue' | 'yellow' }) {
+  const petal =
+    c === 'pink' ? '#f7cdd2' : c === 'blue' ? '#cfe0f2' : c === 'yellow' ? '#f7e6a8' : '#f7f2d9';
+  const center = c === 'yellow' ? '#e8c05a' : '#ecc96b';
   return (
     <svg viewBox="-14 -14 28 28" style={{ width: `calc(${s} * 2.6vmin)`, height: `calc(${s} * 2.6vmin)` }}>
       {[0, 72, 144, 216, 288].map((deg) => (
@@ -114,12 +124,12 @@ function Flower({ s }: { s: number }) {
           cy="-6.6"
           rx="4.6"
           ry="6.4"
-          fill="#f7f2d9"
+          fill={petal}
           transform={`rotate(${deg})`}
         />
       ))}
-      <circle r="3.4" fill="#ecc96b" />
-      <circle r="3.4" cx="-0.8" cy="-0.9" fill="#f6e2a2" opacity="0.8" />
+      <circle r="3.4" fill={center} />
+      <circle r="3.4" cx="-0.8" cy="-0.9" fill="#fff6d6" opacity="0.85" />
     </svg>
   );
 }
@@ -136,7 +146,7 @@ export default function Canopy() {
             top: `calc(${b.y}vmin - ${b.d / 2}vmin)`,
             width: `${b.d}vmin`,
             height: `${b.d}vmin`,
-            background: `radial-gradient(circle at ${b.hx}% ${b.hy}%, ${TONE_FILL[b.tone]} 0%, ${TONE_FILL[b.tone]} 34%, #628f48 68%, #537b3c 100%)`,  /* taste-skill-ignore gradient: 黏土团块/材质/光带的明暗过渡只能靠渐变，这是 3D 捏制质感的物理依据 */
+            background: `radial-gradient(circle at ${b.hx}% ${b.hy}%, ${TONE_FILL[b.tone]} 0%, ${TONE_FILL[b.tone]} 34%, #8fcd69 68%, #6fae4e 100%)`,  /* taste-skill-ignore gradient: 黏土团块/材质/光带的明暗过渡只能靠渐变，这是 3D 捏制质感的物理依据 */
           }}
         />
       ))}
@@ -158,8 +168,8 @@ export default function Canopy() {
               d="M4 44 C 2 26 14 6 44 4 C 46 32 32 44 4 44 Z"
               fill={LEAF_FILL[l.tone]}
             />
-            <path d="M8 40 C 18 30 30 18 40 8 C 30 22 18 32 8 40 Z" fill="#54803f" opacity="0.45" />
-            <path d="M10 38 C 20 30 30 20 38 10" stroke="#9ecb7c" strokeWidth="1.8" strokeLinecap="round" opacity="0.55" fill="none" />
+            <path d="M8 40 C 18 30 30 18 40 8 C 30 22 18 32 8 40 Z" fill="#71ad52" opacity="0.4" />
+            <path d="M10 38 C 20 30 30 20 38 10" stroke="#c2e9a0" strokeWidth="1.8" strokeLinecap="round" opacity="0.6" fill="none" />
           </svg>
         </span>
       ))}
@@ -174,13 +184,13 @@ export default function Canopy() {
 
       {FLOWERS.map((f, i) => (
         <span key={`f${i}`} className="canopy__flower" style={{ left: `${f.x}%`, top: `${f.y}vmin` }}>
-          <Flower s={f.s} />
+          <Flower s={f.s} c={f.c} />
         </span>
       ))}
 
       {/* 冠下垂下来的两条细藤，把冠和草地连起来 */}
       <svg className="canopy__trail canopy__trail--l" viewBox="0 0 120 300" fill="none">
-        <path d="M54 -6 C 78 52 40 96 66 150 C 88 196 54 236 70 296" stroke="#6d9a51" strokeWidth="7" strokeLinecap="round" />
+        <path d="M54 -6 C 78 52 40 96 66 150 C 88 196 54 236 70 296" stroke="#7fc05c" strokeWidth="7" strokeLinecap="round" />
         {[
           [70, 42, 28],
           [52, 92, -34],
@@ -189,14 +199,14 @@ export default function Canopy() {
           [72, 252, 26],
         ].map(([x, y, r], i) => (
           <g key={i} transform={`translate(${x} ${y}) rotate(${r})`}>
-            <path d="M0 0 C 13 -18 41 -16 47 2 C 41 22 11 22 0 0 Z" fill={i % 2 === 0 ? '#8cb968' : '#7aa857'} />
-            <path d="M42 7 C 37 20 17 24 4 11 C 19 18 34 16 42 7 Z" fill="#5c8745" opacity="0.5" />
+            <path d="M0 0 C 13 -18 41 -16 47 2 C 41 22 11 22 0 0 Z" fill={i % 2 === 0 ? '#9fdc77' : '#8fcd69'} />
+            <path d="M42 7 C 37 20 17 24 4 11 C 19 18 34 16 42 7 Z" fill="#71ad52" opacity="0.5" />
           </g>
         ))}
       </svg>
 
       <svg className="canopy__trail canopy__trail--r" viewBox="0 0 120 300" fill="none">
-        <path d="M64 -6 C 40 52 78 96 52 150 C 30 196 64 236 48 296" stroke="#6d9a51" strokeWidth="7" strokeLinecap="round" />
+        <path d="M64 -6 C 40 52 78 96 52 150 C 30 196 64 236 48 296" stroke="#7fc05c" strokeWidth="7" strokeLinecap="round" />
         {[
           [46, 42, -28],
           [68, 92, 34],
@@ -205,8 +215,8 @@ export default function Canopy() {
           [46, 252, -26],
         ].map(([x, y, r], i) => (
           <g key={i} transform={`translate(${x} ${y}) rotate(${r})`}>
-            <path d="M0 0 C 13 -18 41 -16 47 2 C 41 22 11 22 0 0 Z" fill={i % 2 === 0 ? '#7aa857' : '#8cb968'} />
-            <path d="M42 7 C 37 20 17 24 4 11 C 19 18 34 16 42 7 Z" fill="#5c8745" opacity="0.5" />
+            <path d="M0 0 C 13 -18 41 -16 47 2 C 41 22 11 22 0 0 Z" fill={i % 2 === 0 ? '#8fcd69' : '#9fdc77'} />
+            <path d="M42 7 C 37 20 17 24 4 11 C 19 18 34 16 42 7 Z" fill="#71ad52" opacity="0.5" />
           </g>
         ))}
       </svg>

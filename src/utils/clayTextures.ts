@@ -7,13 +7,13 @@ import * as THREE from 'three';
  * 色调全部落在莫兰迪区间（灰绿海、灰苔陆地、浅土黄高地）。
  */
 
-const OCEAN = '#63a6d2';
-const OCEAN_DEEP = '#5194c4';
-const LAND = '#6cae4d';
-const LAND_DEEP = '#569140';
-const LAND_LIT = '#86c165';
-const OCHRE = '#cbb073';
-const ICE = '#eff2e4';
+const OCEAN = '#6ec4e8';
+const OCEAN_DEEP = '#4fa8d5';
+const LAND = '#9be17b';
+const LAND_DEEP = '#77c95b';
+const LAND_LIT = '#b6ef94';
+const OCHRE = '#e2c98a';
+const ICE = '#f7faf2';
 
 /** 经纬度 → 等距圆柱像素 */
 const px = (lon: number, w: number) => ((lon + 180) / 360) * w;

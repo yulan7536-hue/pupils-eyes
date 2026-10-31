@@ -161,8 +161,8 @@ export default function App() {
     setNewPinId(pin.id);
     setWorks((prev) => [work, ...prev]);
 
-    // 教师教案：先用规则引擎兜底，再异步调真 AI 覆盖雷达图
-    if (payload.role === 'TEACHER') {
+    // 教师教案：上传时若已跑过大模型解析就直接采用，否则异步补算并覆盖规则引擎结果
+    if (payload.role === 'TEACHER' && payload.radar?.source !== 'ai') {
       analyzeLesson(payload.content)
         .then((analysis) => {
           setWorks((prev) => prev.map((w) => (w.id === work.id ? { ...w, radar: analysis } : w)));

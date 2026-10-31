@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import RadarChart from './RadarChart';
 import PopUpBook from './PopUpBook';
 import type { WorkItem } from '../types';
@@ -43,7 +43,17 @@ export default function BookSpread({ book, works, onClose, onOpenWork }: BookSpr
 
   const active = list.find((w) => w.id === activeId) ?? list[0];
 
+  // 换篇之后把正文卷回顶部：滚动容器是复用的，不重置会接着上一篇的位置往下读
+  const spreadRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
+    spreadRef.current?.querySelectorAll('.page__body').forEach((el) => {
+      (el as HTMLElement).scrollTop = 0;
+    });
+  }, [activeId]);
+
+  useEffect(() => {
+    // 相册由 PopUpBook 自己接管键盘与滚动锁（它要配合折平动画再关闭）
+    if (!isNote) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
@@ -53,9 +63,12 @@ export default function BookSpread({ book, works, onClose, onOpenWork }: BookSpr
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
     };
-  }, [onClose]);
+  }, [onClose, isNote]);
 
   const select = (id: string) => {
+    // 窄屏只摊开一页：点目录条目必须同时把页面翻到正文，否则点了跟没点一样。
+    // 放在最前面，点当前这一条也能从目录翻进正文。
+    setPanel('r');
     if (id === activeId) return;
     storySound.playPaperTurn();
     setActiveId(id);
@@ -113,7 +126,9 @@ export default function BookSpread({ book, works, onClose, onOpenWork }: BookSpr
             <div className="radar-wrap__head">
               <span className="radar-wrap__title">行智开物 · 教案六维智能雷达图</span>
               <span className="radar-wrap__tag tnum">
-                {active.radar.source === 'ai' ? 'AI 解析' : '规则引擎'}
+                {active.radar.source === 'ai'
+                  ? `${active.radar.model ?? 'AI'}${active.radar.latencyMs ? ` · ${(active.radar.latencyMs / 1000).toFixed(1)}s` : ''}`
+                  : '规则引擎'}
               </span>
             </div>
             <RadarChart analysis={active.radar} />
@@ -143,30 +158,21 @@ export default function BookSpread({ book, works, onClose, onOpenWork }: BookSpr
     </div>
   );
 
-  /* ---------------- 相册：整本摊开成一个 3D 立体书舞台 ---------------- */
+  /* ---------------- 相册：整本交给 3D 立体书舞台 ---------------- */
 
-  const albumStage = (
-    <div className="page__inner page__inner--stage">
-      <div className="page__head">
-        <h2 className="page__book">《学生成果展示》</h2>
-        <span className="page__count tnum">共 {list.length} 份</span>
-      </div>
-      <div className="page__body page__body--album no-scrollbar">
-        <PopUpBook works={list} onOpenWork={onOpenWork} />
-      </div>
-      <div className="page__foot">行影 · 学生成果</div>
-    </div>
-  );
+  if (!isNote) {
+    return <PopUpBook works={list} onClose={onClose} onOpenWork={onOpenWork} />;
+  }
 
-  const left = isNote ? noteIndex : albumStage;
-  const right = isNote ? noteDetail : null;
+  const left = noteIndex;
+  const right = noteDetail;
 
   return (
     <div
-      className="veil"
+      className="veil veil--note"
       role="dialog"
       aria-modal="true"
-      aria-label={isNote ? '教案实录手账' : '学生成果展示'}
+      aria-label="教案实录手账"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -182,48 +188,44 @@ export default function BookSpread({ book, works, onClose, onOpenWork }: BookSpr
         </svg>
       </button>
 
-      {isNote ? (
-        <div className="spread">
-          {wide ? (
-            <>
-              <div className="page page--l">{left}</div>
-              <div className="page page--r">
-                {right}
-                {flip > 0 && <div className="flip" key={flip} />}
-              </div>
-              <div className="spread__spine" aria-hidden="true" />
-            </>
-          ) : (
-            <>
-              <div className="page page--single">{panel === 'l' ? left : right}</div>
-              <div className="pager pager--float">
-                <button
-                  type="button"
-                  className="btn btn--quiet"
-                  onClick={() => setPanel('l')}
-                  disabled={panel === 'l'}
-                >
-                  目录
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--quiet"
-                  onClick={() => setPanel('r')}
-                  disabled={panel === 'r'}
-                >
-                  正文
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      ) : (
-        /* 相册：单一大舞台，立体书横跨整个摊开面 */
-        <div className="spread spread--album">
-          <div className="page page--stage">{albumStage}</div>
-          <div className="spread__spine" aria-hidden="true" />
-        </div>
-      )}
+      <div className="spread" ref={spreadRef}>
+        {wide ? (
+          <>
+            <div className="page page--l">{left}</div>
+            <div className="page page--r">
+              {right}
+              {flip > 0 && <div className="flip" key={flip} />}
+            </div>
+            <div className="spread__spine" aria-hidden="true" />
+          </>
+        ) : (
+          <>
+            <div className="page page--single">
+              {panel === 'l' ? left : right}
+              {/* 单页模式翻页时也盖一张纸：从目录翻进正文要有"翻过去了"的手感 */}
+              {panel === 'r' && flip > 0 && <div className="flip" key={flip} />}
+            </div>
+            <div className="pager pager--float">
+              <button
+                type="button"
+                className="btn btn--quiet"
+                onClick={() => setPanel('l')}
+                disabled={panel === 'l'}
+              >
+                {panel === 'r' ? '返回目录' : '目录'}
+              </button>
+              <button
+                type="button"
+                className="btn btn--quiet"
+                onClick={() => setPanel('r')}
+                disabled={panel === 'r'}
+              >
+                正文
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

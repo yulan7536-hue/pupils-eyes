@@ -103,4 +103,8 @@ export interface RadarAnalysis {
   summary: string; // 一段整体点评
   source: 'ai' | 'heuristic'; // ai = 真大模型解析；heuristic = 本地规则兜底
   generatedAt: string;
+  /** source 为 ai 时，记录实际生效的模型名，界面上要显示「谁解析的」 */
+  model?: string;
+  /** 该模型本次解析耗时（毫秒） */
+  latencyMs?: number;
 }
