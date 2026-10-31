@@ -177,9 +177,16 @@ export default function LightChase({ onReveal, onDone }: LightChaseProps) {
         cursor: settled ? 'default' : 'none',
       }}
     >
-      {/* 光点本体：静止时在正中浮现 */}
+      {/* 光点本体：静止时在正中浮现；点击光点本身即跳转 */}
       {phase === 'chase' && (
-        <div className="chase__mote" ref={moteRef}>
+        <div
+          className="chase__mote"
+          ref={moteRef}
+          onClick={handleClick}
+          role="button"
+          aria-label="开启灵感之光"
+          title={settled ? '点击光点，开启灵感之光' : undefined}
+        >
           <div
             className="chase__aura"
             style={{
@@ -212,9 +219,7 @@ export default function LightChase({ onReveal, onDone }: LightChaseProps) {
       {!settled && <p className="chase__hint">移动光标 · 追随微光</p>}
 
       {settled && phase === 'chase' && (
-        <button type="button" className="chase__cta" onClick={handleClick}>
-          点击灵感之光
-        </button>
+        <p className="chase__cta">点击光点，开启灵感之光</p>
       )}
 
       {/* 光晕转场：边缘始终柔和，放大铺满后又以光晕的形式收缩消散 */}

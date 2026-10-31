@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import ClayMotif, { motifFor } from './ClayMotif';
+import RadarChart from './RadarChart';
+import PopUpBook from './PopUpBook';
 import type { WorkItem } from '../types';
 import { storySound } from '../utils/sound';
 
@@ -105,6 +106,22 @@ export default function BookSpread({ book, works, onClose, onOpenWork }: BookSpr
           <span>{active.school}</span>
           <span>执教 · {active.author}</span>
         </div>
+
+        {/* AI 教案解析：六维智能雷达图 */}
+        {active.radar ? (
+          <div className="radar-wrap">
+            <div className="radar-wrap__head">
+              <span className="radar-wrap__title">行智开物 · 教案六维智能雷达图</span>
+              <span className="radar-wrap__tag tnum">
+                {active.radar.source === 'ai' ? 'AI 解析' : '规则引擎'}
+              </span>
+            </div>
+            <RadarChart analysis={active.radar} />
+          </div>
+        ) : (
+          <p className="prose">这篇教案还未生成六维雷达图。</p>
+        )}
+
         <p className="prose">{active.content}</p>
 
         {active.comments.length > 0 && (
@@ -126,69 +143,23 @@ export default function BookSpread({ book, works, onClose, onOpenWork }: BookSpr
     </div>
   );
 
-  /* ---------------- 相册页 ---------------- */
+  /* ---------------- 相册：整本摊开成一个 3D 立体书舞台 ---------------- */
 
-  // 成果左右两页均分，缺的位置用"待收录"占位：
-  // 像一本真的相册那样留着相角，而不是让某一页整页空白
-  const half = Math.ceil(list.length / 2);
-  const slotsFor = (n: number) => (n <= 2 ? 2 : 4);
-
-  const placeholder = (key: string) => (
-    <div className="tile tile--empty" key={key} aria-hidden="true">
-      <span className="tile__well">
-        <span className="tile__plus">+</span>
-      </span>
-      <span className="tile__cap tile__cap--empty">待收录</span>
-    </div>
-  );
-
-  const albumPage = (items: WorkItem[], side: 'l' | 'r', total: number) => (
-    <div className="page__inner">
+  const albumStage = (
+    <div className="page__inner page__inner--stage">
       <div className="page__head">
-        {side === 'l' ? (
-          <h2 className="page__book">《学生成果展示》</h2>
-        ) : (
-          <h2 className="page__book page__book--soft">学生成果 · 续</h2>
-        )}
-        <span className="page__count tnum">
-          {side === 'l' ? '一' : '二'} · 共 {total} 份
-        </span>
+        <h2 className="page__book">《学生成果展示》</h2>
+        <span className="page__count tnum">共 {list.length} 份</span>
       </div>
       <div className="page__body page__body--album no-scrollbar">
-        <div className="grid">
-          {items.map((w) => (
-            <button
-              key={w.id}
-              type="button"
-              className="tile"
-              onClick={() => {
-                storySound.playPinDrop();
-                onOpenWork(w);
-              }}
-            >
-              <span className="tile__well">
-                <ClayMotif kind={motifFor(w.title)} />
-              </span>
-              <span className="tile__cap">{w.title}</span>
-              <span className="tile__sub">
-                {w.region.split('·').pop()} · {w.author}
-              </span>
-            </button>
-          ))}
-          {Array.from({ length: Math.max(0, slotsFor(items.length) - items.length) }, (_, i) =>
-            placeholder(`${side}-gap-${i}`)
-          )}
-        </div>
+        <PopUpBook works={list} onOpenWork={onOpenWork} />
       </div>
       <div className="page__foot">行影 · 学生成果</div>
     </div>
   );
 
-  const albumLeft = albumPage(list.slice(0, half), 'l', list.length);
-  const albumRight = albumPage(list.slice(half), 'r', list.length);
-
-  const left = isNote ? noteIndex : albumLeft;
-  const right = isNote ? noteDetail : albumRight;
+  const left = isNote ? noteIndex : albumStage;
+  const right = isNote ? noteDetail : null;
 
   return (
     <div
@@ -211,40 +182,48 @@ export default function BookSpread({ book, works, onClose, onOpenWork }: BookSpr
         </svg>
       </button>
 
-      <div className="spread">
-        {wide ? (
-          <>
-            <div className="page page--l">{left}</div>
-            <div className="page page--r">
-              {right}
-              {flip > 0 && <div className="flip" key={flip} />}
-            </div>
-            <div className="spread__spine" aria-hidden="true" />
-          </>
-        ) : (
-          <>
-            <div className="page page--single">{panel === 'l' ? left : right}</div>
-            <div className="pager pager--float">
-              <button
-                type="button"
-                className="btn btn--quiet"
-                onClick={() => setPanel('l')}
-                disabled={panel === 'l'}
-              >
-                {isNote ? '目录' : '上一页'}
-              </button>
-              <button
-                type="button"
-                className="btn btn--quiet"
-                onClick={() => setPanel('r')}
-                disabled={panel === 'r'}
-              >
-                {isNote ? '正文' : '下一页'}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+      {isNote ? (
+        <div className="spread">
+          {wide ? (
+            <>
+              <div className="page page--l">{left}</div>
+              <div className="page page--r">
+                {right}
+                {flip > 0 && <div className="flip" key={flip} />}
+              </div>
+              <div className="spread__spine" aria-hidden="true" />
+            </>
+          ) : (
+            <>
+              <div className="page page--single">{panel === 'l' ? left : right}</div>
+              <div className="pager pager--float">
+                <button
+                  type="button"
+                  className="btn btn--quiet"
+                  onClick={() => setPanel('l')}
+                  disabled={panel === 'l'}
+                >
+                  目录
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--quiet"
+                  onClick={() => setPanel('r')}
+                  disabled={panel === 'r'}
+                >
+                  正文
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        /* 相册：单一大舞台，立体书横跨整个摊开面 */
+        <div className="spread spread--album">
+          <div className="page page--stage">{albumStage}</div>
+          <div className="spread__spine" aria-hidden="true" />
+        </div>
+      )}
     </div>
   );
 }

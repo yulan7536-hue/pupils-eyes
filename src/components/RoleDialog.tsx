@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { LocationChoice, Role, SubmissionPayload } from '../types';
 import { storySound } from '../utils/sound';
+import { analyzeLessonSync } from '../utils/aiLesson';
 
 interface RoleDialogProps {
   location: LocationChoice;
@@ -59,6 +60,8 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
       imageUrl: image ?? undefined,
       digitalResourceUrl: resourceUrl.trim() || undefined,
       date: '刚刚',
+      // 教师教案：先同步生成规则引擎雷达图兜底，真 AI 结果由 App 异步覆盖
+      radar: isTeacher ? analyzeLessonSync(content.trim()) : undefined,
     });
     storySound.playPinDrop();
   };

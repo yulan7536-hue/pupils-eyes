@@ -1255,11 +1255,11 @@ button {
   gap: clamp(10px, 1.4vmin, 16px);
 }
 
-/* 相册页的格子不多时，让它落在页面的视觉中线上，不要贴着页顶悬一大片白 */
+/* 相册页（3D 立体书）：内容从顶部自然流动，立体书撑满后由滚动接管 */
 .page__body--album {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .tile {
@@ -1740,6 +1740,21 @@ textarea.input {
   left: 0;
   top: 0;
   will-change: transform;
+  cursor: pointer;
+  /* 命中区：以光点中心为原点铺开一块够大的点击区，再被 child 的 pointer-events:none 抵消掉视觉遮挡 */
+  width: 0;
+  height: 0;
+}
+
+.chase__mote::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 104px;
+  height: 104px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
 }
 
 .chase__core {
@@ -1807,16 +1822,14 @@ textarea.input {
   left: 50%;
   top: 50%;
   transform: translate(-50%, calc(-50% + 15vmin));
-  border: 0;
-  background: none;
+  margin: 0;
   color: #fff;
   font-family: inherit;
   font-size: clamp(13px, 1.5vmin, 16px);
   font-weight: 200;
   letter-spacing: 0.42em;
   white-space: nowrap;
-  cursor: pointer;
-  padding: 14px 18px;
+  pointer-events: none;
   /* taste-skill-ignore shadow: 黑场上的发光提示字，属于需求指定的"光晕"语言 */
   text-shadow: 0 0 12px rgba(255, 255, 255, 0.95), 0 0 30px rgba(255, 244, 214, 0.55); /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
   animation: hint-in 1.1s var(--ease-soft) both;
@@ -2154,6 +2167,471 @@ textarea.input {
   /* 树冠在窄屏上收窄，别把标题吞掉 */
   .canopy {
     height: 38vmin;
+  }
+}
+
+/* ============================================================
+   教案六维智能雷达图
+   ============================================================ */
+
+.radar-wrap {
+  margin-bottom: clamp(16px, 2.4vmin, 26px);
+  padding: clamp(14px, 2vmin, 22px);
+  border-radius: 18px;
+  background: #f3ecd9;
+  box-shadow: inset 0 0 0 1px rgba(120, 104, 76, 0.1); /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
+}
+
+.radar-wrap__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: clamp(8px, 1.2vmin, 14px);
+}
+
+.radar-wrap__title {
+  font-size: clamp(13px, 1.4vmin, 15px);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+}
+
+.radar-wrap__tag {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(109, 138, 92, 0.16);
+  color: var(--sage-deep);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.radar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.9fr);
+  gap: clamp(14px, 2vmin, 26px);
+  align-items: start;
+}
+
+.radar__chart {
+  position: relative;
+}
+
+.radar__svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.radar__node {
+  cursor: pointer;
+}
+
+.radar__node circle {
+  transition: r 0.2s var(--ease-soft);
+}
+
+.radar__label {
+  cursor: pointer;
+}
+
+.radar__label-text {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  transition: fill 0.2s var(--ease-soft);
+}
+
+.radar__label-score {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.radar__panel {
+  min-height: 100%;
+  padding: clamp(14px, 2vmin, 22px);
+  border-radius: 16px;
+  background: var(--paper-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7); /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
+}
+
+.radar__detail {
+  animation: radar-detail-in 0.3s var(--ease-soft) both;
+}
+
+.radar__detail-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin-bottom: 1em;
+}
+
+.radar__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.radar__detail-title {
+  font-size: clamp(15px, 1.7vmin, 18px);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+.radar__detail-score {
+  margin-left: auto;
+  font-size: clamp(20px, 2.4vmin, 26px);
+  font-weight: 500;
+  color: var(--rose-deep);
+}
+
+.radar__rubric-label {
+  margin: 0 0 0.4em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+}
+
+.radar__rubric {
+  margin: 0 0 1.1em;
+  font-size: clamp(12px, 1.3vmin, 14px);
+  font-weight: 300;
+  line-height: 1.8;
+  color: var(--ink-soft);
+}
+
+.radar__highlight {
+  margin: 0;
+  padding: clamp(10px, 1.4vmin, 14px);
+  border-radius: 12px;
+  background: rgba(179, 140, 138, 0.14);
+  font-size: clamp(12px, 1.3vmin, 14px);
+  font-weight: 300;
+  line-height: 1.8;
+  color: #5c4a40;
+}
+
+.radar__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+}
+
+.radar__empty-tip {
+  margin: 0;
+  font-size: clamp(12px, 1.3vmin, 14px);
+  font-weight: 300;
+  line-height: 1.8;
+  color: var(--ink-soft);
+}
+
+.radar__summary {
+  margin: 0;
+  padding-top: 0.9em;
+  border-top: 1px solid rgba(120, 104, 76, 0.18); /* taste-skill-ignore hairline: 内页/表单的细分隔线属于书的纸页结构，不是装饰线条 */
+  font-size: clamp(12px, 1.3vmin, 14px);
+  font-weight: 300;
+  line-height: 1.8;
+  color: var(--ink-soft);
+}
+
+/* 窄屏：雷达图与量规上下堆叠 */
+@media (max-width: 720px) {
+  .radar {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   CSS 3D 照片立体书（Pop-up Book）
+   ============================================================ */
+
+.popup {
+  perspective: 1200px;
+}
+
+.popup__spread {
+  position: relative;
+  transform-style: preserve-3d;
+  width: 100%;
+}
+
+/* 后景课题背景卡：贴在页面上，随视差轻微偏移 */
+.popup__bg {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(180, 95, 89, 0.08), rgba(109, 138, 92, 0.1)); /* taste-skill-ignore gradient: 立体书后景的层次过渡只能靠渐变 */
+  transform: translateZ(-60px);
+  pointer-events: none;
+}
+
+/* 中景立起的学生成果照片卡：以底边为轴折起，最终停在一个轻微立起角度 */
+.popup__card {
+  position: relative;
+  transform-style: preserve-3d;
+  transform-origin: bottom center;
+  transform: rotateX(var(--tilt, -4deg));
+  animation: popup-rise 0.9s var(--ease-clay) both;
+  cursor: pointer;
+  /* 底部折痕阴影区，容纳文字与投影，避免被压到 */
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 18px;
+  margin-bottom: 4px;
+}
+
+.popup__card:hover {
+  transform: rotateX(var(--tilt, -4deg)) translateY(-4px) scale(1.02);
+}
+
+.popup__frame {
+  position: relative;
+  display: block;
+  padding: clamp(8px, 1.2vmin, 14px);
+  border-radius: 6px;
+  background: #fff;
+  transform-style: preserve-3d;
+  box-shadow: /* taste-skill-ignore shadow: 立体剪纸的厚白边与底部折痕阴影，是 Pop-up 立体感的物理来源 */
+    0 2px 0 0 rgba(0, 0, 0, 0.06),
+    0 18px 34px -14px rgba(30, 38, 32, 0.55),
+    inset 0 0 0 1px rgba(120, 104, 76, 0.12);
+}
+
+/* 厚白边：给纸片一个可见的"厚度"，强化立体折纸感 */
+.popup__frame::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px;
+  border-radius: 0 0 6px 6px;
+  background: linear-gradient(to top, #e7e0cf, #fff); /* taste-skill-ignore gradient: 立体剪纸的纸页厚度只能靠渐变表现 */
+  transform: translateZ(-3px);
+}
+
+.popup__media {
+  position: relative;
+  display: block;
+  aspect-ratio: 4 / 3;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--paper-2);
+}
+
+.popup__media svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* 底部折痕阴影：让纸片看起来是从页面里"立起来"的，但不越出卡片压到文字 */
+.popup__crease {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 2px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(30, 38, 32, 0.26), rgba(30, 38, 32, 0) 70%); /* taste-skill-ignore gradient: 立体剪纸底部折痕阴影只能靠径向渐变模拟 */
+  filter: blur(3px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.popup__cap {
+  display: block;
+  margin-top: 0.6em;
+  text-align: center;
+  font-size: clamp(11px, 1.15vmin, 12.5px);
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
+.popup__sub {
+  display: block;
+  margin-top: 0.25em;
+  text-align: center;
+  font-size: clamp(10px, 1.02vmin, 11px);
+  font-weight: 300;
+  color: var(--ink-faint);
+  letter-spacing: 0.06em;
+}
+
+/* 相册摊开成单一大舞台，立体书横跨整面 */
+.spread--album {
+  width: min(1240px, 94vw);
+}
+
+.page--stage {
+  border-radius: 10px;
+  animation: page-open-l 0.75s var(--ease-clay) 0.12s both;
+  box-shadow: /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
+    inset 0 0 0 1px rgba(120, 104, 76, 0.08),
+    0 calc(var(--u) * 1.4) calc(var(--u) * 3) rgba(30, 38, 32, 0.3);
+}
+
+.page__inner--stage {
+  padding: clamp(20px, 3.2vmin, 42px);
+}
+
+/* 前景小花草折纸：贴在页面最前，制造三层景深 */
+.popup__frill {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  transform: translateX(-50%) translateZ(50px);
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+/* 翻页控制条 */
+.popup__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: clamp(10px, 1.6vmin, 18px);
+}
+
+.popup__nav-meta {
+  font-size: clamp(11px, 1.2vmin, 13px);
+  font-weight: 300;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}
+
+.popup__nav-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* 数字资源包下载入口已并入翻页控制条（.popup__nav-actions） */
+.popup__nav-actions .btn {
+  flex: 0 0 auto;
+  min-height: 46px;
+  line-height: 1;
+}
+
+@keyframes popup-rise {
+  from {
+    transform: rotateX(-85deg);
+    opacity: 0.4;
+  }
+  to {
+    transform: rotateX(var(--tilt, -4deg));
+    opacity: 1;
+  }
+}
+
+@keyframes radar-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================
+   地区选择：自定义可滚动下拉（picker）
+   ============================================================ */
+
+.picker {
+  position: relative;
+}
+
+.picker__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6em;
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: #e9e2d0;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: clamp(13px, 1.3vmin, 14.5px);
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 0 2px 4px rgba(110, 96, 70, 0.18); /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
+  transition: background 0.25s, box-shadow 0.25s;
+}
+
+.picker__trigger:hover {
+  background: #f4efe0;
+}
+
+.picker__trigger svg {
+  flex: 0 0 auto;
+  color: var(--ink-faint);
+}
+
+.picker__list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  max-height: 40vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 12px;
+  background: #f7f2e2;
+  box-shadow: 0 18px 40px -18px rgba(30, 42, 34, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.9); /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
+  animation: picker-in 0.22s var(--ease-soft) both;
+}
+
+.picker__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6em;
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: clamp(13px, 1.3vmin, 14.5px);
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+
+.picker__option:hover {
+  background: rgba(179, 140, 138, 0.12);
+}
+
+.picker__option[aria-selected='true'] {
+  background: rgba(179, 140, 138, 0.18);
+  font-weight: 500;
+}
+
+.picker__check {
+  color: var(--rose-deep);
+  font-size: 13px;
+}
+
+@keyframes picker-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

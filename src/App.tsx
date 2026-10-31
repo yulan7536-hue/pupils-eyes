@@ -10,25 +10,46 @@ import PinBurst from './components/PinBurst';
 import { loadSavedPins, loadSavedWorks, savePins, saveWorks } from './data/initialWorks';
 import type { LocationChoice, PinItem, SubmissionPayload, WorkItem } from './types';
 import { storySound } from './utils/sound';
+import { analyzeLesson, analyzeLessonSync } from './utils/aiLesson';
 
 /** 四阶段时间轴：开场 → 追光 → 主场景 → 沉浸交互 */
 type Step = 'INTRO' | 'CHASE' | 'LAWN';
 
 export default function App() {
-  // #lawn 可直接落到主场景，开会演示与逐屏校对时省掉前两段
+  // #lawn 可直接落到主场景；#note / #album 直接翻开对应书本，便于逐屏校对
   const [step, setStep] = useState<Step>(() =>
-    typeof window !== 'undefined' && window.location.hash === '#lawn' ? 'LAWN' : 'INTRO'
+    typeof window !== 'undefined' && ['#lawn', '#note', '#album'].includes(window.location.hash)
+      ? 'LAWN'
+      : 'INTRO'
   );
   const [chaseAlive, setChaseAlive] = useState(false);
-
   const [pins, setPins] = useState<PinItem[]>(() => loadSavedPins());
   const [works, setWorks] = useState<WorkItem[]>(() => loadSavedWorks());
+
+  // 给历史教案惰性补上六维雷达图（老数据没有 radar 字段）
+  useEffect(() => {
+    setWorks((prev) => {
+      let changed = false;
+      const next = prev.map((w) => {
+        if (w.role === 'TEACHER' && !w.radar) {
+          changed = true;
+          return { ...w, radar: analyzeLessonSync(w.content) };
+        }
+        return w;
+      });
+      return changed ? next : prev;
+    });
+  }, []);
 
   const [globeOpen, setGlobeOpen] = useState(false);
   const [target, setTarget] = useState<{ lat: number; lon: number } | null>(null);
   const [newPinId, setNewPinId] = useState<string | null>(null);
 
-  const [book, setBook] = useState<'note' | 'album' | null>(null);
+  const [book, setBook] = useState<'note' | 'album' | null>(() =>
+    typeof window !== 'undefined' && (window.location.hash === '#note' || window.location.hash === '#album')
+      ? window.location.hash === '#note' ? 'note' : 'album'
+      : null
+  );
   const [sheet, setSheet] = useState<WorkItem | null>(null);
 
   const [regionOpen, setRegionOpen] = useState(false);
@@ -120,25 +141,36 @@ export default function App() {
       desc: payload.content.slice(0, 96) + (payload.content.length > 96 ? '…' : ''),
     };
 
+    const work: WorkItem = {
+      ...payload,
+      id: `pin-${payload.id}`,
+      region: payload.region,
+      likes: 1,
+      comments: [
+        {
+          id: `c-${Date.now()}`,
+          user: '行智开物导师',
+          text: `已归档至课桌，童眼看 ${payload.district} 又多了一份实践。`,
+          time: '刚刚',
+        },
+      ],
+      radar: payload.radar,
+    };
+
     setPins((prev) => [pin, ...prev.filter((p) => !p.id.startsWith('draft-'))]);
     setNewPinId(pin.id);
-    setWorks((prev) => [
-      {
-        ...payload,
-        id: `pin-${payload.id}`,
-        region: payload.region,
-        likes: 1,
-        comments: [
-          {
-            id: `c-${Date.now()}`,
-            user: '行智开物导师',
-            text: `已归档至课桌，童眼看 ${payload.district} 又多了一份实践。`,
-            time: '刚刚',
-          },
-        ],
-      },
-      ...prev,
-    ]);
+    setWorks((prev) => [work, ...prev]);
+
+    // 教师教案：先用规则引擎兜底，再异步调真 AI 覆盖雷达图
+    if (payload.role === 'TEACHER') {
+      analyzeLesson(payload.content)
+        .then((analysis) => {
+          setWorks((prev) => prev.map((w) => (w.id === work.id ? { ...w, radar: analysis } : w)));
+        })
+        .catch(() => {
+          /* 兜底已就位，静默即可 */
+        });
+    }
 
     setRoleOpen(false);
     setGlobeOpen(false);

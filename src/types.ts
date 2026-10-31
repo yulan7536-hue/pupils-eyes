@@ -41,6 +41,8 @@ export interface WorkItem {
   date: string;
   likes: number;
   comments: Comment[];
+  /** AI 教案解析结果：教师上传后由 analyzeLesson 生成，学生成果为 undefined */
+  radar?: RadarAnalysis;
 }
 
 /** 表单提交载荷（不含点赞与评论，由 App 补齐） */
@@ -61,6 +63,8 @@ export interface SubmissionPayload {
   videoUrl?: string;
   digitalResourceUrl?: string;
   date: string;
+  /** 教师教案：可选的初始雷达分析（规则引擎即时兜底），真 AI 结果稍后异步覆盖 */
+  radar?: RadarAnalysis;
 }
 
 export interface LocationChoice {
@@ -70,4 +74,33 @@ export interface LocationChoice {
   lat: number;
   lon: number;
   locationString: string;
+}
+
+/* ---------------- AI 教案解析：六维智能雷达图 ---------------- */
+
+/** 六维雷达图的 6 个固定维度（顺序即雷达图的顶点顺序，不可变） */
+export const RADAR_DIMENSIONS = [
+  '具身感知度',
+  '思维建模深度',
+  '人机协同创造',
+  '跨学科融合度',
+  '地域文化连接',
+  '方案成果可行性',
+] as const;
+
+export type RadarDimension = (typeof RADAR_DIMENSIONS)[number];
+
+/** 单个维度的解析结果：0-100 评分 + 量规描述 + AI 对本篇教案的亮点解析 */
+export interface RadarAxis {
+  dimension: RadarDimension;
+  score: number; // 0-100
+  rubric: string; // 该维度的评价量规标准
+  highlight: string; // AI 针对本篇教案在该维度下的亮点解析
+}
+
+export interface RadarAnalysis {
+  axes: RadarAxis[]; // 长度恒为 6，顺序与 RADAR_DIMENSIONS 一致
+  summary: string; // 一段整体点评
+  source: 'ai' | 'heuristic'; // ai = 真大模型解析；heuristic = 本地规则兜底
+  generatedAt: string;
 }
