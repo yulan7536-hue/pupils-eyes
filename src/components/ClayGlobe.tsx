@@ -102,9 +102,18 @@ export default function ClayGlobe({
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
-    // 取景把「弧顶」到「底座底」刚好收进画布，缩小后底座才能严丝合缝落在桌板上
-    const VIEW_Y = -0.27;
-    camera.position.set(0, VIEW_Y, 7.26);
+    /*
+     * 取景要同时兜住两样东西：球顶（y=+2.03）和底座圆盘的最低点（y=-2.745）。
+     * 只按球半径算视锥是不够的——圆盘半径 0.7，它靠镜头那一侧在透视下会被放大，
+     * 于是底座前沿比球体下缘还低出一截，直接掉到画布外面被切平，
+     * 看起来就像贴图贴了一半。这里联立「顶部留 4%、底部贴边」解出相机位置：
+     *   (2.034 - VIEW_Y) = 0.96 · tan(19°) · d
+     *   (2.745 + VIEW_Y) = 1.00 · tan(19°) · (d - 0.7)   ← 减 0.7 是圆盘半径带来的近距补偿
+     * 解得 VIEW_Y ≈ -0.425、d ≈ 7.44。底座下沿正好压在画布底边上，
+     * 落座后画布底边一贴住台面，铜座就是踩实的。
+     */
+    const VIEW_Y = -0.425;
+    camera.position.set(0, VIEW_Y, 7.44);
     camera.lookAt(0, VIEW_Y, 0);
     cameraRef.current = camera;
 

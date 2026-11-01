@@ -1082,6 +1082,10 @@ button {
   flex: 0 0 auto;
   width: calc(var(--u) * 28);
   height: calc(var(--u) * 28);
+  /* 画布底边就是铜座的下沿（取景时已让它贴边），
+     所以这里要抵掉 .desk__items 的 padding-bottom，
+     让画布底边正好落在台面上沿，球才是踩在木板上而不是悬着 */
+  margin-bottom: calc(var(--u) * -0.4);
 }
 
 /* 长凳正面的藏品牌：烫在木料上的两行小字，居中 */
