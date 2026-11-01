@@ -185,7 +185,7 @@ export default function MainLawn({
         style={{
           position: 'absolute',
           inset: 0,
-          backgroundImage: "url('/garden-bg.jpg')",
+          backgroundImage: `url('${import.meta.env.BASE_URL}garden-bg.jpg')`,
           backgroundPosition: 'center bottom',
           backgroundSize: 'cover',
           backgroundRepeat: 'no-repeat',

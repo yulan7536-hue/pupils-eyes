@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import OpeningVideo from './components/OpeningVideo';
 import LightChase from './components/LightChase';
 import MainLawn from './components/MainLawn';
@@ -256,25 +258,37 @@ export default function App() {
     const setupThreeViewer = () => {
       const container = viewerMountRef.current;
       if (!container) return;
-      const THREE = (window as any).THREE;
-      if (!THREE) return;
 
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
-      camera.position.set(0, 1.8, 6.5);
+      camera = new THREE.PerspectiveCamera(42, container.clientWidth / container.clientHeight, 0.1, 1000);
+      camera.position.set(0, 1.15, 5.9);
 
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      // WebGL 不可用（老设备 / 关闭硬件加速 / 无头环境）时不要抛错炸掉整个弹窗，
+      // 降级成一张静态提示，左侧文物档案照常可读。
+      try {
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      } catch (err) {
+        console.warn('[artifact viewer] WebGL 不可用，已降级为文字档案', err);
+        const tip = document.createElement('div');
+        tip.className = 'tr-viewer-fallback';
+        tip.textContent = '当前设备暂不支持 3D 预览 · 左侧档案仍可查看';
+        container.appendChild(tip);
+        return;
+      }
       renderer.setSize(container.clientWidth, container.clientHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
       container.appendChild(renderer.domElement);
 
-      const OrbitControls = (window as any).THREE.OrbitControls;
-      let controls: any;
-      if (OrbitControls) {
-        controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-      }
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.target.set(0, 0, 0);
+      controls.minDistance = 3.2;
+      controls.maxDistance = 12;
+      // 交给 OrbitControls 自转：用户一拖就停，松手后继续，不会和拖拽打架
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 1.1;
+      controls.enablePan = false;
 
       scene.add(new THREE.AmbientLight(0xfff5e6, 0.7));
       const dirLight = new THREE.DirectionalLight(0xffecd2, 1.3);
@@ -284,55 +298,87 @@ export default function App() {
       meshGroup = new THREE.Group();
       const currentData = artifactDatabase[activeArtifactKey];
       const toonMat = new THREE.MeshToonMaterial({ color: currentData.color });
+      const shadeMat = new THREE.MeshToonMaterial({
+        color: new THREE.Color(currentData.color).multiplyScalar(0.72),
+      });
 
       if (activeArtifactKey === 'pavilion') {
-        const roof = new THREE.Mesh(new THREE.ConeGeometry(2, 1.2, 4), toonMat);
-        roof.position.y = 1.1;
+        // 屋顶 → 四根檐柱 → 台基，三段必须接得上，否则看着像漂浮的两块积木
+        const ROOF_BOTTOM = 1.32;
+        const PLINTH_TOP = 0.02;
+
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(1.62, 1.05, 4), toonMat);
+        roof.position.y = ROOF_BOTTOM + 0.525;
         roof.rotation.y = Math.PI / 4;
-        const base = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.8, 0.35, 8), toonMat);
-        base.position.y = -1;
-        meshGroup.add(roof, base);
+        meshGroup.add(roof);
+
+        // 檐下一圈薄檐板，把锥体与柱子视觉上收口
+        const eave = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.58, 0.1, 4), shadeMat);
+        eave.position.y = ROOF_BOTTOM - 0.04;
+        eave.rotation.y = Math.PI / 4;
+        meshGroup.add(eave);
+
+        const columnH = ROOF_BOTTOM - PLINTH_TOP;
+        const column = new THREE.CylinderGeometry(0.08, 0.09, columnH, 8);
+        const corners = [
+          [0.86, 0.86],
+          [-0.86, 0.86],
+          [0.86, -0.86],
+          [-0.86, -0.86],
+        ];
+        corners.forEach(([x, z]) => {
+          const c = new THREE.Mesh(column, toonMat);
+          c.position.set(x, PLINTH_TOP + columnH / 2, z);
+          meshGroup.add(c);
+        });
+
+        const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.42, 1.54, 0.18, 4), shadeMat);
+        plinth.position.y = PLINTH_TOP - 0.09;
+        plinth.rotation.y = Math.PI / 4;
+        meshGroup.add(plinth);
       } else if (activeArtifactKey === 'opera') {
+        // 三片壳：从同一基面向上生长，只做轻微前倾，避免互相穿模
         for (let i = 0; i < 3; i++) {
-          const sail = new THREE.Mesh(new THREE.ConeGeometry(1.3 - i * 0.28, 2.2 - i * 0.35, 3), toonMat);
-          sail.position.set(-0.7 + i * 0.7, -0.2 + i * 0.2, i * 0.18);
-          sail.rotation.z = -0.3;
+          const sail = new THREE.Mesh(
+            new THREE.ConeGeometry(1.0 - i * 0.16, 1.75 - i * 0.22, 3),
+            i === 1 ? shadeMat : toonMat
+          );
+          sail.position.set(-0.78 + i * 0.78, 0.32 + i * 0.1, i * 0.22);
+          sail.rotation.z = -0.2;
           meshGroup.add(sail);
         }
+        const podium = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.18, 1.25), shadeMat);
+        podium.position.y = -0.72;
+        meshGroup.add(podium);
       } else {
-        const arch = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.24, 8, 24, Math.PI), toonMat);
-        arch.position.y = 0.5;
-        const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 2, 12), toonMat);
-        p1.position.set(-1.2, -0.5, 0);
+        const arch = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.22, 10, 28, Math.PI), toonMat);
+        arch.position.y = 0.42;
+        const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 2, 12), toonMat);
+        p1.position.set(-1.1, -0.58, 0);
         const p2 = p1.clone();
-        p2.position.set(1.2, -0.5, 0);
-        meshGroup.add(arch, p1, p2);
+        p2.position.set(1.1, -0.58, 0);
+        const step = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.16, 0.95), shadeMat);
+        step.position.y = -1.62;
+        meshGroup.add(arch, p1, p2, step);
       }
+
+      // 模型整体居中：先算包围盒，再把它挪到原点，避免各物件高低不一
+      const box = new THREE.Box3().setFromObject(meshGroup);
+      const center = box.getCenter(new THREE.Vector3());
+      meshGroup.position.sub(center);
 
       scene.add(meshGroup);
 
       const renderLoop = () => {
         animId = requestAnimationFrame(renderLoop);
-        if (controls) controls.update();
-        if (meshGroup) meshGroup.rotation.y += 0.003;
+        controls.update();
         renderer.render(scene, camera);
       };
       renderLoop();
     };
 
-    if (!(window as any).THREE) {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-      script.onload = () => {
-        const controlScript = document.createElement('script');
-        controlScript.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
-        controlScript.onload = setupThreeViewer;
-        document.head.appendChild(controlScript);
-      };
-      document.head.appendChild(script);
-    } else {
-      setupThreeViewer();
-    }
+    // three 已随项目打包，无需再从 CDN 动态加载
+    setupThreeViewer();
 
     return () => {
       cancelAnimationFrame(animId);
