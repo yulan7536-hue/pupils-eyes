@@ -1,10 +1,13 @@
 /**
  * 具身感知 · 感官打捞工作台
- * 对应方案 4.4（原 SensoryHarvest.vue）：
- * 落实【行】段——断网纸笔体验之后，把看/听/摸/闻的第一手体验
- * 打捞成结构化的「感官地图」，为后面的创作提供灵感来源。
+ * 落实【行】段——走出屏幕去触摸真实的竹叶、嗅闻清晨泥土，
+ * 再用童眼把第一手体验打捞成一张「感官取景框」。
+ *
+ * 视觉：绘本晨曦 · 赛璐璐黏土。四个感官各是一块带墨线与实体切面的黏土方块，
+ * 选中时整块被"按下去"（位移 2px、阴影同步吃掉 2px），像软胶一样回弹。
  */
 import { useState } from 'react';
+import { useTilt } from '../utils/useTilt';
 
 type SenseType = 'sight' | 'touch' | 'sound' | 'smell';
 
@@ -12,28 +15,53 @@ type SenseItem = {
   type: SenseType;
   label: string;
   icon: string;
+  /** 赛璐璐色块：蓝=所见、粉=触觉、黄=声响、绿=气味 */
+  colorClass: string;
   value: string;
 };
 
-/** 初始值沿用方案示例（竹林观察记），教师可整条改写 */
 const INITIAL_ITEMS: SenseItem[] = [
-  { type: 'sight', label: '童眼所见', icon: '👀', value: '晨光穿过竹林的深浅绿影' },
-  { type: 'touch', label: '指尖触觉', icon: '🖐️', value: '竹节边缘有细微毛糙感' },
-  { type: 'sound', label: '耳边声响', icon: '👂', value: '风吹叶尖沙沙作响' },
-  { type: 'smell', label: '空气气息', icon: '👃', value: '潮湿泥土混合新笋清香' },
+  {
+    type: 'sight',
+    label: '童眼所见',
+    icon: '👀',
+    colorClass: 'clay-blue',
+    value: '晨光穿透绿叶的光斑',
+  },
+  {
+    type: 'touch',
+    label: '指尖触碰',
+    icon: '🖐️',
+    colorClass: 'clay-pink',
+    value: '竹枝边缘微微扎手的毛糙',
+  },
+  {
+    type: 'sound',
+    label: '侧耳倾听',
+    icon: '👂',
+    colorClass: 'clay-yellow',
+    value: '风吹过林梢沙沙的响声',
+  },
+  {
+    type: 'smell',
+    label: '空气气味',
+    icon: '👃',
+    colorClass: 'clay-sage',
+    value: '带露水的泥土与青草甘香',
+  },
 ];
 
-/** 快捷词库：给说不出话的孩子一个台阶 */
 const PRESETS: Record<SenseType, string[]> = {
-  sight: ['斑驳光影', '粗粝纹理', '晨雾朦胧', '透亮翠绿'],
-  touch: ['冰凉湿润', '凹凸不平', '像旧砂纸', '温热平滑'],
-  sound: ['清脆如铃', '低沉嗡鸣', '断断续续', '沙沙细响'],
-  smell: ['微苦草木', '甘甜果香', '雨后泥腥', '日晒干燥'],
+  sight: ['斑驳光影', '毛糙边缘', '透亮淡绿', '晨雾朦胧'],
+  touch: ['像旧砂纸', '冰凉湿润', '凹凸不平', '温润微滑'],
+  sound: ['沙沙细响', '清脆如铃', '断断续续', '嗡嗡微鸣'],
+  smell: ['雨后青草', '微苦泥香', '清甜竹气', '日晒干燥'],
 };
 
 export default function SensoryHarvest() {
   const [items, setItems] = useState<SenseItem[]>(INITIAL_ITEMS);
   const [activeType, setActiveType] = useState<SenseType>('touch');
+  const tiltRef = useTilt<HTMLDivElement>(2);
 
   const activeItem = items.find((i) => i.type === activeType);
   const activeValue = activeItem?.value ?? '';
@@ -49,50 +77,48 @@ export default function SensoryHarvest() {
   };
 
   return (
-    <div className="xz-glass-card shv">
-      <div className="shv__head">
-        <div className="shv__tag">【行】感官前置打捞</div>
-        <h3 className="shv__title">童眼观察记：我的感官地图</h3>
-        <p className="shv__sub">先用眼睛观察、双手触碰，再把第一手体验转化为创作灵感。</p>
+    <div className="toon-clay-card shv" ref={tiltRef}>
+      <div>
+        <div className="vintage-badge">【行】感官前置打捞</div>
+        <h3 className="comic-title">童眼看世界 · 感官取景框</h3>
+        <p className="subtitle">走出屏幕去触摸真实的竹叶、嗅闻清晨泥土，再用童眼记录下来。</p>
       </div>
 
-      <div className="shv__grid">
+      <div className="senses-grid">
         {items.map((item) => (
           <button
             type="button"
             key={item.type}
-            className={`shv__card${activeType === item.type ? ' is-active' : ''}`}
+            className={`clay-block ${item.colorClass}${activeType === item.type ? ' is-active' : ''}`}
             onClick={() => setActiveType(item.type)}
             aria-pressed={activeType === item.type}
           >
-            <span className="shv__icon" aria-hidden="true">{item.icon}</span>
-            <div className="shv__label">{item.label}</div>
-            <div className={`shv__val${item.value ? '' : ' is-empty'}`}>
-              {item.value || '点击补充感知...'}
-            </div>
+            <span className="block-cap">
+              <span className="block-icon" aria-hidden="true">{item.icon}</span>
+              <span>{item.label}</span>
+            </span>
+            <span className="block-preview">{item.value || '待打捞...'}</span>
           </button>
         ))}
       </div>
 
-      <div className="shv__input-group">
-        <label className="shv__input-label" htmlFor="shv-input">
-          正在打捞【{activeItem?.label}】的感觉：
-        </label>
+      <div className="input-slot">
+        <div className="slot-label">正在记录【{activeItem?.label}】：</div>
 
-        <div className="shv__tags">
+        <div className="preset-pills">
           {currentPresets.map((tag) => (
-            <button type="button" key={tag} className="shv__chip" onClick={() => addTag(tag)}>
+            <button type="button" key={tag} className="tag-pill" onClick={() => addTag(tag)}>
               + {tag}
             </button>
           ))}
         </div>
 
         <input
-          id="shv-input"
-          className="shv__input"
+          className="toon-input"
           value={activeValue}
           onChange={(e) => setActiveValue(e.target.value)}
-          placeholder="用具体的词语描述，例如：带着毛边、有泥土微酸的清冽..."
+          placeholder="记录摸到的粗糙、清晨风里的草木气味..."
+          aria-label={`记录${activeItem?.label ?? ''}`}
         />
       </div>
     </div>

@@ -60,11 +60,15 @@ export default function HeaderNav({ onClose }: Props) {
           <span>主平台数据已联通</span>
         </div>
 
-        <button type="button" className="xz-pill-btn xz-pill-btn-outline" onClick={returnToMainPlatform}>
+        <button
+          type="button"
+          className="toon-btn toon-btn-ghost toon-btn--sm"
+          onClick={returnToMainPlatform}
+        >
           返回主平台大厅
         </button>
 
-        <button type="button" className="xz-pill-btn xz-pill-btn-outline" onClick={onClose}>
+        <button type="button" className="toon-btn toon-btn-pink toon-btn--sm" onClick={onClose}>
           返回课桌
         </button>
 
