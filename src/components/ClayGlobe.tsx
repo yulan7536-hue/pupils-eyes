@@ -103,17 +103,21 @@ export default function ClayGlobe({
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
     /*
-     * 取景要同时兜住两样东西：球顶（y=+2.03）和底座圆盘的最低点（y=-2.745）。
-     * 只按球半径算视锥是不够的——圆盘半径 0.7，它靠镜头那一侧在透视下会被放大，
+     * 取景要同时兜住两样东西：球顶（y=+2.034）和底座圆盘的最低点（y=-2.89）。
+     * 只按球半径算视锥是不够的——圆盘半径 0.95，它靠镜头那一侧在透视下会被放大，
      * 于是底座前沿比球体下缘还低出一截，直接掉到画布外面被切平，
-     * 看起来就像贴图贴了一半。这里联立「顶部留 4%、底部贴边」解出相机位置：
-     *   (2.034 - VIEW_Y) = 0.96 · tan(19°) · d
-     *   (2.745 + VIEW_Y) = 1.00 · tan(19°) · (d - 0.7)   ← 减 0.7 是圆盘半径带来的近距补偿
-     * 解得 VIEW_Y ≈ -0.425、d ≈ 7.44。底座下沿正好压在画布底边上，
-     * 落座后画布底边一贴住台面，铜座就是踩实的。
+     * 看起来就像贴图贴了一半。这里联立「顶部留 2%、底部贴边」解出相机位置：
+     *   (2.034 - VIEW_Y) = 0.98 · tan(19°) · d
+     *   (2.890 + VIEW_Y) = 1.00 · tan(19°) · (d - 0.95)   ← 减 0.95 是圆盘半径带来的近距补偿
+     * 解得 VIEW_Y = -0.566、d ≈ 7.705。改底座尺寸就必须回来重解这两个式子。
+     *
+     * 相机再抬高 LIFT：纯水平视角下底座圆盘被压成一条线，看不到顶面，
+     * 于是它只能"站在台面前沿这一条线上"，怎么调都像浮着。
+     * 抬高约 4.7° 后圆盘顶面与台面顶带是同一个俯视透视，接触处才会变成椭圆。
      */
-    const VIEW_Y = -0.425;
-    camera.position.set(0, VIEW_Y, 7.44);
+    const VIEW_Y = -0.566;
+    const LIFT = 0.64;
+    camera.position.set(0, VIEW_Y + LIFT, 7.705);
     camera.lookAt(0, VIEW_Y, 0);
     cameraRef.current = camera;
 
@@ -213,18 +217,24 @@ export default function ClayGlobe({
     collar.position.y = -(R + 0.02);
     baseGroup.add(collar);
 
-    // 立柱：从球的底部往下，接住底座
-    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.1, 0.62, 20), brassMat);
-    stem.position.y = -(R + 0.26);
+    // 立柱：从球的底部往下，接住底座。比原来粗一档，
+    // 细柱子顶着一颗大球看着就站不稳
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.12, 0.7, 24), brassMat);
+    stem.position.y = -(R + 0.25);
     baseGroup.add(stem);
 
-    // 圆盘底座：两层，上小下大，像被车出来的铜座
-    const discTop = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.56, 0.11, 40), brassMat);
+    /*
+     * 圆盘底座：两层，上小下大，像被车出来的铜座。
+     * 尺寸是照着「压得住上面那颗球」定的：直径 1.9（球径的 0.48 倍）、
+     * 两层合计 0.4 高。原来直径 1.4、高 0.24，投影到屏幕上只有 90×20 像素，
+     * 顶着 220 像素的球，怎么调都像被一根杆子举着。
+     */
+    const discTop = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.78, 0.18, 48), brassMat);
     discTop.position.y = -(R + 0.58);
     baseGroup.add(discTop);
 
-    const discBottom = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.7, 0.13, 40), brassDeep);
-    discBottom.position.y = -(R + 0.68);
+    const discBottom = new THREE.Mesh(new THREE.CylinderGeometry(0.87, 0.95, 0.22, 48), brassDeep);
+    discBottom.position.y = -(R + 0.78);
     baseGroup.add(discBottom);
 
     const pinsGroup = new THREE.Group();

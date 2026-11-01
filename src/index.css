@@ -615,7 +615,11 @@ button {
   justify-content: center;
   gap: calc(var(--u) * 5.5);
   height: calc(var(--u) * 31);
-  padding-bottom: calc(var(--u) * 0.4);
+  /* 台面顶带是有进深的一块面（约 2u 高），物件要"坐进去"而不是踩在
+     台面上沿那条线上：整组下沉 0.8u，书底就落在顶带内部，
+     前面还看得见一小条台面。原来留 0.4u 的 padding-bottom 反而是让
+     书底比台面上沿还高，物件脚下会漏出草色。 */
+  margin-bottom: calc(var(--u) * -0.4);
 }
 
 /* 桌板顶面：被压出来的薄薄一层受光面，比板材略宽，形成出檐 */
@@ -628,6 +632,8 @@ button {
   border-bottom: 0;
   border-radius: calc(var(--u) * 3) calc(var(--u) * 3) 0 0;
   background: #f7efe0;
+  /* 纯装饰面，不接管指针：地球仪的画布压在它上面，别让这一层截走落座的点击 */
+  pointer-events: none;
 }
 
 /* 桌板正面：一块厚木料，边缘不规则，像用手压过 */
@@ -1082,10 +1088,11 @@ button {
   flex: 0 0 auto;
   width: calc(var(--u) * 28);
   height: calc(var(--u) * 28);
-  /* 画布底边就是铜座的下沿（取景时已让它贴边），
-     所以这里要抵掉 .desk__items 的 padding-bottom，
-     让画布底边正好落在台面上沿，球才是踩在木板上而不是悬着 */
-  margin-bottom: calc(var(--u) * -0.4);
+  /* 画布底边就是铜座下沿（取景时让它贴边），再比物件基线多沉 0.2u。
+     关键是要算上圆盘底缘的椭圆：俯视 4.6° 下，直径 1.6 的圆盘投影出
+     约 7px 高的椭圆，中心最低、两侧比中心高 7px。只沉到台面上沿的话，
+     底座两侧会露在台面前面的草地上——看着就是悬空的。 */
+  margin-bottom: calc(var(--u) * -0.6);
 }
 
 /* 长凳正面的藏品牌：烫在木料上的两行小字，居中 */
@@ -1120,18 +1127,21 @@ button {
   white-space: nowrap;
 }
 
-/* 地球仪坐在桌面上的接触阴影（3D 画布本身投不出影子） */
+/* 地球仪坐在台面上的接触阴影（3D 画布本身投不出影子）。
+   用 top: 100% 从画布底边「往下」铺，并故意上探 0.7u：
+   上探的那一小截落在画布透明区里，会透出来贴着底座；
+   下探的部分铺在台面顶带上。用 bottom 定位会往画布内部长，被自己的底边压住看不见。 */
 .globe-slot::after {
   content: '';
   position: absolute;
   left: 50%;
-  bottom: calc(var(--u) * -0.2);
-  width: 62%;
-  height: calc(var(--u) * 1.6);
+  top: calc(100% - var(--u) * 0.25);
+  width: 50%;
+  height: calc(var(--u) * 1.7);
   transform: translateX(-50%);
   border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(56, 72, 60, 0.5), rgba(56, 72, 60, 0) 72%); /* taste-skill-ignore gradient: 黏土球体/光斑的明暗过渡只能靠渐变，这是 3D 捏制质感的物理依据 */
-  filter: blur(calc(var(--u) * 0.3));
+  background: radial-gradient(ellipse at 50% 0%, rgba(58, 40, 22, 0.62), rgba(58, 40, 22, 0) 70%); /* taste-skill-ignore gradient: 黏土静物接触阴影只能靠渐变铺出由实到虚的过渡 */
+  filter: blur(calc(var(--u) * 0.2));
   pointer-events: none;
 }
 
