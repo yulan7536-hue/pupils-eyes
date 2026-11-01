@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import Desk from './Desk';
-import Canopy from './Canopy';
 import ClayGlobe from './ClayGlobe';
 import type { PinItem, WorkItem } from '../types';
 
@@ -22,27 +21,13 @@ interface MainLawnProps {
   onOpenStudio: () => void;
   onSelectPin: (pin: PinItem) => void;
   onReplay: () => void;
+  /** 新增：《古墓丽影》风格 3D 文物建筑检视回调 */
+  onInspectArtifact?: (key: string) => void;
 }
 
 const TUFTS = [46, 72, 38, 88, 56, 96, 44, 76, 50, 84, 40, 66, 34, 80, 48, 70, 42, 92, 54, 64];
 
-/** 远坡上的一排树冠（x, y, r），下半截被前面的山脊挡住 */
-const GROVE: [number, number, number][] = [
-  [90, 374, 18],
-  [196, 356, 28],
-  [318, 348, 22],
-  [452, 326, 26],
-  [548, 310, 17],
-  [676, 320, 29],
-  [782, 334, 20],
-  [906, 316, 15],
-  [1010, 306, 27],
-  [1128, 320, 19],
-  [1246, 314, 25],
-  [1352, 310, 16],
-];
-
-/** 空气里飘的光点：参考插画里散在场景中的小萤火 */
+/** 空气里飘动的晨曦微光点 */
 const MOTES = [
   { x: 12, y: 62, s: 0.7, d: 0 },
   { x: 20, y: 45, s: 1, d: 1.6 },
@@ -56,15 +41,9 @@ const MOTES = [
   { x: 7, y: 38, s: 0.8, d: 5 },
   { x: 47, y: 74, s: 0.55, d: 4.6 },
   { x: 78, y: 76, s: 0.6, d: 0.4 },
-  { x: 16, y: 30, s: 0.9, d: 2.8 },
-  { x: 36, y: 52, s: 0.7, d: 5.4 },
-  { x: 68, y: 25, s: 1.05, d: 1.9 },
-  { x: 89, y: 52, s: 0.75, d: 3.3 },
-  { x: 51, y: 22, s: 0.6, d: 6.1 },
-  { x: 26, y: 78, s: 0.5, d: 4.1 },
 ];
 
-/** 背景里的大颗柔和 Bokeh 光斑：暖白/淡金，缓慢漂浮 */
+/** 暖白 / 淡金 Bokeh 光斑 */
 const BOKEH = [
   { x: 8, y: 18, s: 2.6, d: 0 },
   { x: 24, y: 12, s: 3.4, d: 2.2 },
@@ -72,71 +51,8 @@ const BOKEH = [
   { x: 64, y: 10, s: 3.8, d: 1.4 },
   { x: 82, y: 15, s: 2.8, d: 5.2 },
   { x: 95, y: 24, s: 3.2, d: 2.8 },
-  { x: 14, y: 34, s: 2.4, d: 3.6 },
-  { x: 55, y: 30, s: 2.9, d: 0.9 },
-  { x: 74, y: 38, s: 2.3, d: 4.1 },
-  { x: 90, y: 44, s: 2.6, d: 2.4 },
-  { x: 33, y: 8, s: 2.5, d: 1.7 },
-  { x: 69, y: 52, s: 2.1, d: 3.4 },
-  { x: 5, y: 50, s: 2.7, d: 2.1 },
-  { x: 49, y: 60, s: 2.4, d: 5.6 },
 ];
 
-/** 草坪上的黏土小花：只放几处，给空场一点活气 */
-function LawnDecor() {
-  return (
-    <div
-      aria-hidden="true"
-      style={{ position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none' }}
-    >
-      {[
-        { left: '17%', bottom: '2%', s: 1 },
-        { left: '26%', bottom: '6%', s: 0.8 },
-        { left: '76%', bottom: '3%', s: 1.1 },
-        { left: '86%', bottom: '7%', s: 0.85 },
-        { left: '7%', bottom: '10%', s: 0.9 },
-        { left: '94%', bottom: '13%', s: 0.75 },
-      ].map((f, i) => (
-        <svg
-          key={`f${i}`}
-          viewBox="0 0 40 52"
-          style={{
-            position: 'absolute',
-            left: f.left,
-            bottom: f.bottom,
-            width: `calc(var(--u) * ${3.4 * f.s})`,
-            height: `calc(var(--u) * ${4.4 * f.s})`,
-            transform: 'translateX(-50%)',
-          }}
-        >
-          <path d="M20 52 C 20 40 20 32 20 24" stroke="#7cb356" strokeWidth="2.6" strokeLinecap="round" />
-          {[0, 72, 144, 216, 288].map((deg) => (
-            <ellipse key={deg} cx="20" cy="14" rx="5.2" ry="8" fill="#f8f3da" transform={`rotate(${deg} 20 20)`} />
-          ))}
-          <circle cx="20" cy="20" r="4" fill="#ecc96b" />
-        </svg>
-      ))}
-    </div>
-  );
-}
-
-/** 地平线上的草叶fringe：让草坪的顶边不是一刀切 */
-const BLADE_H = [52, 74, 40, 88, 64, 46, 96, 58, 80, 44, 70, 92, 50, 78, 62, 86, 42, 68, 98, 54, 76, 48, 90, 60, 82, 46, 72, 94, 56, 66, 84, 50];
-
-function BladeFringe() {
-  return (
-    <div className="lawn__blades" aria-hidden="true">
-      {BLADE_H.map((h, i) => (
-        <svg key={i} viewBox="0 0 24 100" style={{ height: `${h}%` }}>
-          <path d="M12 100 C 11 74 7 52 2 34 C 9 54 12 74 13 100 Z" fill="#7cb356" />
-          <path d="M13 100 C 14 70 18 50 22 32 C 18 52 14 72 15 100 Z" fill="#93c86c" />
-        </svg>
-      ))}
-    </div>
-  );
-}
-
-/** 飘浮光点 + 空气感 Bokeh 光斑 */
 function Fireflies() {
   return (
     <div className="motes" aria-hidden="true">
@@ -177,9 +93,6 @@ function Tuft({ h }: { h: number }) {
       <path d="M64 100 C 62 58 56 34 40 8 C 58 32 65 60 68 100 Z" fill="#8ac361" />
       <path d="M66 100 C 68 62 76 38 96 18 C 80 44 71 70 70 100 Z" fill="#9ad16d" />
       <path d="M60 100 C 54 70 42 54 18 44 C 42 56 57 74 62 100 Z" fill="#82ba58" />
-      <path d="M68 100 C 72 72 84 56 106 48 C 86 60 74 76 71 100 Z" fill="#8ac361" />
-      <path d="M63 100 C 63 64 66 44 74 26 C 70 48 68 70 68 100 Z" fill="#a2d976" />
-      <path d="M64 100 C 60 74 52 60 34 52 C 54 62 62 78 66 100 Z" fill="#6fa548" />
     </svg>
   );
 }
@@ -198,11 +111,13 @@ export default function MainLawn({
   onOpenStudio,
   onSelectPin,
   onReplay,
+  onInspectArtifact,
 }: MainLawnProps) {
   const slotRef = useRef<HTMLDivElement | null>(null);
   const [globeSize, setGlobeSize] = useState(600);
   const [dock, setDock] = useState({ x: 0, y: 0, scale: 0.3 });
   const [hover, setHover] = useState<{ pin: PinItem; x: number; y: number } | null>(null);
+  const [isWisteriaSwaying, setIsWisteriaSwaying] = useState(false);
 
   const noteCount = useMemo(() => works.filter((w) => w.role === 'TEACHER').length, [works]);
   const albumCount = useMemo(() => works.filter((w) => w.role === 'STUDENT').length, [works]);
@@ -217,7 +132,7 @@ export default function MainLawn({
     return () => window.removeEventListener('keydown', onKey);
   }, [globeOpen, onToggleGlobe]);
 
-  // 地球仪的画布边长：随视口变化，封顶 640
+  // 地球仪自适应尺寸
   useEffect(() => {
     const measureSize = () => {
       setGlobeSize(Math.min(window.innerHeight * 0.78, window.innerWidth * 0.94, 640));
@@ -227,7 +142,7 @@ export default function MainLawn({
     return () => window.removeEventListener('resize', measureSize);
   }, []);
 
-  // 量出桌面上的落座位置，把地球仪从"屏幕正中"平移到书桌上
+  // 将地球仪精准对位到书桌的凹槽中
   useEffect(() => {
     const measure = () => {
       const el = slotRef.current;
@@ -248,6 +163,12 @@ export default function MainLawn({
     };
   }, [globeSize]);
 
+  // 鼠标划过紫藤触发摆动
+  const triggerWisteria = () => {
+    setIsWisteriaSwaying(false);
+    setTimeout(() => setIsWisteriaSwaying(true), 10);
+  };
+
   const globeStyle = {
     '--globe-size': `${globeSize}px`,
     '--gx': globeOpen ? '0px' : `${dock.x}px`,
@@ -257,51 +178,66 @@ export default function MainLawn({
 
   return (
     <>
-    <div className="scene stage-in">
-      {/* 定稿背景图：世界秘密花园插画，铺在最底层当整个主场景的基底 */}
-      <div className="scene__photo" aria-hidden="true" />
+    <div className={`scene stage-in ${isWisteriaSwaying ? 'wisteria-swaying' : ''}`}>
+      {/* 1. 铺上刚上传的三渲二世界秘密花园背景大图 */}
+      <div 
+        className="scene__photo" 
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: "url('/garden-bg.jpg')",
+          backgroundPosition: 'center bottom',
+          backgroundSize: 'cover',
+          backgroundRepeat: 'no-repeat',
+          zIndex: 0,
+        }}
+        aria-hidden="true" 
+      />
 
-      <div className="scene__procedural">
-      <div className="scene__field" aria-hidden="true" />
-      <div className="scene__haze" aria-hidden="true" />
+      {/* 2. 顶部紫藤鼠标微风交互热区 */}
+      <div 
+        className="wisteria-hover-zone"
+        onMouseEnter={triggerWisteria}
+        title="微风拂过紫藤"
+      />
 
-      {/* 远坡：一条极淡的地平线，只负责把天和草分开，不抢树冠的戏 */}
-      <div className="scene__hills" aria-hidden="true">
-        <svg viewBox="0 0 1440 640" preserveAspectRatio="none">
-          <path
-            fill="var(--hill-far)"
-            d="M0 452 C 150 424 268 442 402 420 C 542 396 674 428 806 410 C 940 392 1088 420 1226 402 C 1320 390 1396 396 1440 392 L1440 640 L0 640 Z"
-          />
-          <g>
-            {GROVE.map(([x, y, r], i) => (
-              <circle key={i} cx={x} cy={y + 96} r={r} fill={i % 3 === 0 ? '#b6d38e' : '#c0da9a'} />
-            ))}
-          </g>
-          <path
-            fill="var(--hill-mid)"
-            d="M0 486 C 156 456 282 474 420 452 C 570 428 706 460 862 444 C 1006 428 1160 454 1300 440 C 1364 434 1414 438 1440 436 L1440 640 L0 640 Z"
-          />
-        </svg>
-      </div>
+      {/* 3. 画面中各大洲代表性建筑的交互热区（点击呼出《古墓丽影》3D 检视器） */}
+      {onInspectArtifact && (
+        <div className="garden-interactive-overlay">
+          <div 
+            className="hotspot-pin pin-chinese-pavilion"
+            onClick={() => onInspectArtifact('pavilion')}
+            title="点击检视：亚洲 · 中式水榭凉亭"
+          >
+            <span className="hotspot-pulse" />
+            <span className="hotspot-chip">亚洲 · 中式水榭</span>
+          </div>
 
-      {/* 树冠：横跨顶部的深绿黏土拱廊 */}
-      <Canopy />
+          <div 
+            className="hotspot-pin pin-roman-arch"
+            onClick={() => onInspectArtifact('arch')}
+            title="点击检视：欧洲 · 古罗马柱廊"
+          >
+            <span className="hotspot-pulse" />
+            <span className="hotspot-chip">欧洲 · 柱廊拱门</span>
+          </div>
 
-      {/* 魔法草坪：一整块压出来的黏土台面，顶边是圆润的草脊 */}
-      <div className="lawn" aria-hidden="true">
-        <div className="lawn__body">
-          <div className="lawn__patch lawn__patch--a" />
-          <div className="lawn__patch lawn__patch--b" />
-          <BladeFringe />
+          <div 
+            className="hotspot-pin pin-sydney-opera"
+            onClick={() => onInspectArtifact('opera')}
+            title="点击检视：大洋洲 · 悉尼歌剧院"
+          >
+            <span className="hotspot-pulse" />
+            <span className="hotspot-chip">大洋洲 · 悉尼白帆</span>
+          </div>
         </div>
-      </div>
+      )}
 
-      <LawnDecor />
+      {/* 4. 晨光粒子 */}
       <div className="scene__glow" aria-hidden="true" />
       <Fireflies />
-      </div>
 
-      {/* 顶部 UI：中文手写 + 英文斜体两行，压一圈奶油描边直接坐在树冠上 */}
+      {/* 5. 顶部双语题字 HUD */}
       <header className="hud">
         <h1 className="hud__title">
           <span className="hud__kicker">童眼看世界 · 行智开物</span>
@@ -333,6 +269,7 @@ export default function MainLawn({
         </div>
       </header>
 
+      {/* 6. 核心展示木长凳（连通手账、相册与地球仪） */}
       <Desk
         noteCount={noteCount}
         albumCount={albumCount}
@@ -341,13 +278,14 @@ export default function MainLawn({
         globeSlotRef={slotRef}
       />
 
-      {/* 前景草丛：压在桌腿前，拉开前后层次 */}
+      {/* 前景原生微草草丛（压在桌腿前，增强前后遮挡层次） */}
       <div className="tufts" aria-hidden="true">
         {TUFTS.map((h, i) => (
           <Tuft key={i} h={h} />
         ))}
       </div>
 
+      {/* 右下角重温开场 */}
       <button type="button" className="hud__replay" onClick={onReplay}>
         <span className="btn-cn">重温开场</span>
         <span className="btn-en" lang="en">
@@ -356,11 +294,9 @@ export default function MainLawn({
       </button>
     </div>
 
-    {/* 地球仪挂到 body 上：与它的遮罩处在同一个层叠上下文里，
-        否则 .scene 的裁剪/合成层会让整颗球跟着背景一起被高斯模糊掉 */}
+    {/* 地球仪独立挂载层（保证放大时不被遮罩模糊，全量保留） */}
     {createPortal(
       <>
-        {/* 地球仪放大时的背景：整屏高斯模糊，只剩球体清晰 */}
         {globeOpen && (
           <div className="veil veil--globe" onClick={onToggleGlobe} aria-hidden="true" />
         )}
@@ -379,7 +315,6 @@ export default function MainLawn({
           />
         </div>
 
-        {/* 图钉悬停气泡：童眼看 [地区名称] */}
         {hover && (
           <div className="pin-tip" style={{ left: hover.x, top: hover.y - 14 }} role="status">
             童眼看 {hover.pin.city.split('·').pop()}
