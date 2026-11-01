@@ -35,6 +35,12 @@ export default function Desk({
             onClick={onOpenNote}
             aria-label={`翻开《教案实录手账》 Pedagogical Chronicle，共 ${noteCount} 篇教学实录`}
           >
+            <span className="item-tag-chip" aria-hidden="true">教学备课</span>
+            <span className="book-tabs" aria-hidden="true">
+              <span className="book-tabs__tab book-tabs__tab--xing">行</span>
+              <span className="book-tabs__tab book-tabs__tab--zhi">智</span>
+              <span className="book-tabs__tab book-tabs__tab--kaiwu">开物</span>
+            </span>
             <span className="book__pages" aria-hidden="true" />
             <span className="book__cover">
               <span className="book__spine" aria-hidden="true" />
@@ -52,7 +58,9 @@ export default function Desk({
           </button>
 
           {/* 中：地球仪的落座占位 */}
-          <div className="globe-slot" ref={globeSlotRef} />
+          <div className="globe-slot" ref={globeSlotRef}>
+            <span className="item-tag-chip item-tag-chip--globe" aria-hidden="true">地方视野</span>
+          </div>
 
           {/* 右：《学生成果展示》 */}
           <button
@@ -61,6 +69,7 @@ export default function Desk({
             onClick={onOpenAlbum}
             aria-label={`翻开《学生成果展示》 Creative Portfolio，共 ${albumCount} 份成果`}
           >
+            <span className="item-tag-chip" aria-hidden="true">童眼成果</span>
             <span className="book__pages" aria-hidden="true" />
             <span className="book__cover">
               <span className="book__spine" aria-hidden="true" />
@@ -68,6 +77,10 @@ export default function Desk({
               <span className="corner corner--tr" aria-hidden="true" />
               <span className="corner corner--bl" aria-hidden="true" />
               <span className="corner corner--br" aria-hidden="true" />
+              <span className="polaroid" aria-hidden="true">
+                <span className="polaroid__art">竹林晨雾</span>
+                <span className="polaroid__tape" />
+              </span>
               <span className="book__plate">
                 <span className="book__label">《学生成果展示》</span>
                 <span className="book__en" aria-hidden="true">

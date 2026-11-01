@@ -163,6 +163,24 @@ button {
   user-select: none;
 }
 
+/* ============================================================
+   定稿背景图：世界秘密花园插画，整个主场景的基底。
+   1080×603（16:9），cover + center bottom 让下部草坪石径始终可见，
+   长凳与三件物件精准坐在开阔草坪处。
+   ============================================================ */
+
+.scene__photo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: url('/media/background.jpg') no-repeat center bottom / cover;
+}
+
+/* 程序化背景（天光/远坡/树冠/草坪）在照片背景下全部让位 */
+.scene__procedural {
+  display: none;
+}
+
 /* 天光：上深下浅的一整片薄荷，靠近地平线的地方被太阳晒白 */
 .scene__field {
   position: absolute;
@@ -435,7 +453,7 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 2rem;
-  padding: calc(var(--u) * 4.1) calc(var(--u) * 4.2) calc(var(--u) * 3);
+  padding: calc(var(--u) * 2.6) calc(var(--u) * 3.6) calc(var(--u) * 3);
   pointer-events: none;
 }
 
@@ -447,18 +465,21 @@ button {
   max-width: 58vw;
   display: flex;
   flex-direction: column;
-  gap: calc(var(--u) * 0.28);
-  color: #ffffff;
-  font-weight: 300;
-  line-height: 1.16;
+  gap: calc(var(--u) * 0.18);
+  /* 背景换成插画后没有深绿树冠托底，改深墨字 + 纸白毛玻璃卡片底。
+     卡片要尽量矮，否则四行字 + 内边距会把下面的书和标签 chip 压住 */
+  color: var(--retro-ink-stroke);
+  font-weight: 400;
+  line-height: 1.12;
   letter-spacing: 0.12em;
-  /* 描边用 text-stroke + paint-order 画在字的外侧，
-     比叠十几层 text-shadow 干净：不会在笔画交界处糊成一片。
-     手写体笔画细，描边要比标题体的细一档，否则笔画会坨成一团。 */
-  -webkit-text-stroke: max(0.6px, calc(var(--u) * 0.11)) var(--outline);
-  paint-order: stroke fill;
-  /* taste-skill-ignore shadow: 参考插画的标题压在树冠上，需要一层干净清透的暖黄弥散光晕托起文字 */
-  text-shadow: 0 2px 12px rgba(255, 240, 180, 0.85); /* taste-skill-ignore shadow: 顶部标题的精致发光是需求指定的核心视觉，用纯净暖黄光晕而非厚重阴影 */
+  padding: calc(var(--u) * 0.9) calc(var(--u) * 2) calc(var(--u) * 1);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(10px);
+  border: var(--toon-border);
+  border-radius: calc(var(--u) * 1.6);
+  /* 实体切面厚度，像一块贴在画上的题字牌 */
+  box-shadow: 0 calc(var(--u) * 0.4) 0 var(--retro-ink-stroke),
+    0 calc(var(--u) * 1.2) calc(var(--u) * 1.6) rgba(45, 55, 72, 0.14); /* taste-skill-ignore shadow: 题字牌的实体切面与落地阴影，压出"贴在画上"的厚度 */
 }
 
 .hud__title span {
@@ -467,7 +488,7 @@ button {
 
 .hud__kicker {
   font-family: var(--font-cn-script);
-  font-size: clamp(13px, calc(var(--u) * 2.5), 26px);
+  font-size: clamp(12px, calc(var(--u) * 2.2), 23px);
   font-weight: 400;
   letter-spacing: 0.08em;
 }
@@ -485,7 +506,7 @@ button {
 
 .hud__headline {
   font-family: var(--font-cn-script);
-  font-size: clamp(23px, calc(var(--u) * 5.2), 54px);
+  font-size: clamp(20px, calc(var(--u) * 4.6), 48px);
   font-weight: 400;
   letter-spacing: 0.06em;
 }
@@ -1143,6 +1164,114 @@ button {
   background: radial-gradient(ellipse at 50% 0%, rgba(58, 40, 22, 0.62), rgba(58, 40, 22, 0) 70%); /* taste-skill-ignore gradient: 黏土静物接触阴影只能靠渐变铺出由实到虚的过渡 */
   filter: blur(calc(var(--u) * 0.2));
   pointer-events: none;
+}
+
+/* ============================================================
+   三渲二物件增强：标签 chip / 书签带 / 拍立得
+   摘自「三渲二嵌合主界面」方案，移植到现有 Desk，不破坏交互
+   ============================================================ */
+
+/* 物件顶部的分类标签：纸白小胶囊，墨线封边。
+   要抬到书签带之上，两者垂直错开，窄屏才不会挤成一团 */
+.item-tag-chip {
+  position: absolute;
+  top: calc(var(--u) * -5.2);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: calc(var(--u) * 0.2) calc(var(--u) * 1.4);
+  border: max(1px, calc(var(--toon-line) * 0.6)) solid var(--retro-ink-stroke);
+  border-radius: 999px;
+  background: #fff9ee;
+  font-family: var(--font-cn-script);
+  font-size: clamp(9px, calc(var(--u) * 1.3), 13px);
+  letter-spacing: 0.06em;
+  color: var(--retro-ink-stroke);
+  white-space: nowrap;
+  box-shadow: 0 calc(var(--u) * 0.2) 0 var(--retro-ink-stroke); /* taste-skill-ignore shadow: 赛璐璐小胶囊的实心切面 */
+  pointer-events: none;
+}
+
+/* 地球仪顶上的标签：真球画布比书矮一截，标签要跟着球顶走 */
+.item-tag-chip--globe {
+  top: calc(var(--u) * -5.2);
+}
+
+/* 粉本书脊处探出的三色书签带。放在 .book 层（封面有 overflow:hidden，
+   放封面内会被裁掉），相对封面顶边往上探一点，像夹在书页里的书签 */
+.book-tabs {
+  position: absolute;
+  top: calc(var(--u) * -1.4);
+  left: calc(var(--u) * 2.6);
+  z-index: 6;
+  display: flex;
+  gap: calc(var(--u) * 0.6);
+}
+
+.book-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--u) * 0.15) calc(var(--u) * 0.9);
+  border: max(1px, calc(var(--toon-line) * 0.6)) solid var(--retro-ink-stroke);
+  border-radius: calc(var(--u) * 0.4) calc(var(--u) * 0.4) 0 0;
+  font-family: var(--font-cn-script);
+  font-size: clamp(9px, calc(var(--u) * 1.15), 12px);
+  line-height: 1.2;
+  color: var(--retro-ink-stroke);
+  box-shadow: 0 calc(var(--u) * -0.22) 0 var(--retro-ink-stroke); /* taste-skill-ignore shadow: 书签带从书顶探出，上缘封一条墨线 */
+}
+
+.book-tabs__tab--xing {
+  background: #faf4e8;
+}
+
+.book-tabs__tab--zhi {
+  background: #ffd147;
+}
+
+.book-tabs__tab--kaiwu {
+  background: #88a89b;
+  color: #fff;
+}
+
+/* 相册封面上斜贴的拍立得照片 */
+.polaroid {
+  position: absolute;
+  top: calc(var(--u) * 1.6);
+  left: calc(var(--u) * 2.2);
+  z-index: 4;
+  width: calc(var(--u) * 8);
+  height: calc(var(--u) * 9.6);
+  padding: calc(var(--u) * 0.5) calc(var(--u) * 0.5) calc(var(--u) * 1.6);
+  background: #ffffff;
+  border: max(1px, calc(var(--toon-line) * 0.6)) solid var(--retro-ink-stroke);
+  border-radius: calc(var(--u) * 0.4);
+  box-shadow: 0 calc(var(--u) * 0.35) 0 var(--retro-ink-stroke); /* taste-skill-ignore shadow: 拍立得的实心厚度 */
+  transform: rotate(-7deg);
+}
+
+.polaroid__art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: #e2ece8;
+  font-family: var(--font-cn-script);
+  font-size: clamp(8px, calc(var(--u) * 1.05), 11px);
+  color: var(--retro-ink-stroke);
+}
+
+.polaroid__tape {
+  position: absolute;
+  top: calc(var(--u) * -0.7);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(var(--u) * 3.6);
+  height: calc(var(--u) * 0.9);
+  background: rgba(255, 209, 71, 0.85);
+  border: 1px dashed var(--retro-ink-stroke);
 }
 
 /* 图钉悬停气泡 */

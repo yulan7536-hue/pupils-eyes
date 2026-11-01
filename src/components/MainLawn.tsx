@@ -258,6 +258,10 @@ export default function MainLawn({
   return (
     <>
     <div className="scene stage-in">
+      {/* 定稿背景图：世界秘密花园插画，铺在最底层当整个主场景的基底 */}
+      <div className="scene__photo" aria-hidden="true" />
+
+      <div className="scene__procedural">
       <div className="scene__field" aria-hidden="true" />
       <div className="scene__haze" aria-hidden="true" />
 
@@ -295,6 +299,7 @@ export default function MainLawn({
       <LawnDecor />
       <div className="scene__glow" aria-hidden="true" />
       <Fireflies />
+      </div>
 
       {/* 顶部 UI：中文手写 + 英文斜体两行，压一圈奶油描边直接坐在树冠上 */}
       <header className="hud">
