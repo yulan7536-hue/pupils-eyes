@@ -66,6 +66,35 @@
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='2.6' intercept='-1.05'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)'/%3E%3C/svg%3E");
 
   --serif: 'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+
+  /* ============================================================
+     复古绘本层：手写字体 + 纸白墨线色板
+     ------------------------------------------------------------
+     草坪场景本身是黏土定格（柔和光感），展台上的本子与长凳换成
+     插画语言：2px 墨线 + 实体切面厚度 + 手写中英文，两种质感在
+     同一画面里分工——背景是黏土，被看的东西是绘本。
+     ============================================================ */
+  --retro-paper-bg: #faf7f2;
+  --retro-sky-mist: #e8f1f2;
+  --retro-ink-stroke: #2d3748; /* 核心墨线，也是深色正文 */
+  --retro-ink-muted: #718096;
+  --retro-pink: #f2a7b5;
+  --retro-pink-shade: #d98595;
+  --retro-sage: #88a89b;
+  --retro-med-blue: #3b739e;
+  --retro-gold-brown: #8c6d62;
+  --retro-wood-face: #faf4e8;
+  --retro-wood-side: #d5c4ac;
+  --retro-wood-deep: #b9a488;
+
+  --font-cn-script: 'Ma Shan Zheng', 'STKaiti', 'Kaiti', var(--serif);
+  --font-en-script: 'Pinyon Script', 'Snell Roundhand', cursive;
+  --font-en-serif: 'Cormorant Garamond', 'Georgia', serif;
+
+  /* 墨线粗细跟着 --u 缩放，窄屏不会显得像一圈粗框 */
+  --toon-line: max(2px, calc(var(--u) * 0.2));
+  --toon-border: var(--toon-line) solid var(--retro-ink-stroke);
+
   --ease-clay: cubic-bezier(0.2, 0.9, 0.24, 1);
   --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -412,17 +441,21 @@ button {
 
 .hud__title {
   margin: 0;
+  /* 让标题宽度跟着最宽的那一行走：花体英文比中文主标宽，
+     用 auto 会被主标宽度卡住、后半句压在展台上 */
+  width: max-content;
+  max-width: 58vw;
   display: flex;
   flex-direction: column;
-  gap: calc(var(--u) * 0.45);
-  --o: calc(var(--u) * 0.28);
+  gap: calc(var(--u) * 0.28);
   color: #ffffff;
   font-weight: 300;
   line-height: 1.16;
   letter-spacing: 0.12em;
   /* 描边用 text-stroke + paint-order 画在字的外侧，
-     比叠十几层 text-shadow 干净：不会在笔画交界处糊成一片 */
-  -webkit-text-stroke: calc(var(--u) * 0.18) var(--outline);
+     比叠十几层 text-shadow 干净：不会在笔画交界处糊成一片。
+     手写体笔画细，描边要比标题体的细一档，否则笔画会坨成一团。 */
+  -webkit-text-stroke: max(0.6px, calc(var(--u) * 0.11)) var(--outline);
   paint-order: stroke fill;
   /* taste-skill-ignore shadow: 参考插画的标题压在树冠上，需要一层干净清透的暖黄弥散光晕托起文字 */
   text-shadow: 0 2px 12px rgba(255, 240, 180, 0.85); /* taste-skill-ignore shadow: 顶部标题的精致发光是需求指定的核心视觉，用纯净暖黄光晕而非厚重阴影 */
@@ -433,57 +466,87 @@ button {
 }
 
 .hud__kicker {
-  font-size: clamp(12px, calc(var(--u) * 2.5), 26px);
-  font-weight: 200;
-  letter-spacing: 0.16em;
+  font-family: var(--font-cn-script);
+  font-size: clamp(13px, calc(var(--u) * 2.5), 26px);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
+
+/* 主标下的英文副标：衬线斜体，跟在中文后面当第二行 */
+.hud__kicker-en {
+  font-family: var(--font-en-serif);
+  font-style: italic;
+  font-size: clamp(10px, calc(var(--u) * 1.45), 18px);
+  font-weight: 400;
+  letter-spacing: 0.13em;
+  opacity: 0.9;
+  margin-bottom: calc(var(--u) * 0.55);
 }
 
 .hud__headline {
-  font-size: clamp(21px, calc(var(--u) * 5.2), 54px);
-  font-weight: 200;
-  letter-spacing: 0.12em;
+  font-family: var(--font-cn-script);
+  font-size: clamp(23px, calc(var(--u) * 5.2), 54px);
+  font-weight: 400;
+  letter-spacing: 0.06em;
 }
 
-/* 右上角：无边框纯白细体字 + 暖黄光晕，与左上角同语言 */
+/* 大字下的花体题跋 */
+.hud__headline-en {
+  font-family: var(--font-en-script);
+  font-size: clamp(14px, calc(var(--u) * 2), 24px);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  opacity: 0.95;
+}
+
+/* 右上角：白底墨线药丸，中文手写 + 英文斜体两行，压树冠上 */
 .hud__action {
   pointer-events: auto;
   display: inline-flex;
-  align-items: center;
-  gap: calc(var(--u) * 0.9);
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: calc(var(--u) * 0.1);
   min-height: 44px;
-  padding: calc(var(--u) * 0.6) calc(var(--u) * 0.4);
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: #ffffff;
+  padding: calc(var(--u) * 0.9) calc(var(--u) * 2.1);
+  border: var(--toon-border);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--retro-ink-stroke);
   cursor: pointer;
-  font-size: clamp(14px, calc(var(--u) * 2.2), 23px);
-  font-weight: 200;
-  letter-spacing: 0.18em;
-  white-space: nowrap;
-  box-shadow: none; /* taste-skill-ignore shadow: 彻底删除胶囊按钮的 box-shadow，改为纯文字+光晕 */
-  /* taste-skill-ignore shadow: 无边框悬浮文字的柔和暖黄光晕，需求指定的精致发光语言 */
-  text-shadow: 0 2px 12px rgba(255, 240, 180, 0.8); /* taste-skill-ignore shadow: 顶部按钮与标题同套纯净暖黄光晕 */
-  transition: transform 0.4s var(--ease-clay), text-shadow 0.4s var(--ease-soft);
-}
-
-/* 文字左侧的精致发光小星芒 */
-.hud__action::before {
-  content: '';
-  width: calc(var(--u) * 1.4);
-  height: calc(var(--u) * 1.4);
-  background: #fff7dd;
-  border-radius: 50%;
-  box-shadow: 0 0 calc(var(--u) * 1.6) rgba(255, 245, 200, 0.95), 0 0 calc(var(--u) * 3.2) rgba(255, 235, 170, 0.55); /* taste-skill-ignore shadow: 星芒光点的高光晕染 */
+  /* 实体切面厚度：白色药丸压下去时有厚度感 */
+  box-shadow: 0 calc(var(--u) * 0.4) 0 var(--retro-ink-stroke); /* taste-skill-ignore shadow: 赛璐璐药丸按钮的实心切面，不是弥散投影 */
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
 .hud__action:hover {
-  transform: translateY(calc(var(--u) * -0.32));
-  text-shadow: 0 2px 16px rgba(255, 240, 180, 1), 0 0 28px rgba(255, 235, 170, 0.6); /* taste-skill-ignore shadow: hover 时光晕变亮 */
+  background: #fff9ee;
+  transform: translateY(calc(var(--u) * -0.2));
+  box-shadow: 0 calc(var(--u) * 0.6) 0 var(--retro-ink-stroke); /* taste-skill-ignore shadow: hover 时切面加厚 */
 }
 
 .hud__action:active {
-  transform: translateY(calc(var(--u) * 0.1));
+  transform: translateY(calc(var(--u) * 0.4));
+  box-shadow: 0 0 0 var(--retro-ink-stroke); /* taste-skill-ignore shadow: 按下去把厚度坐实 */
+}
+
+/* 药丸里的中英两行 */
+.btn-cn {
+  font-family: var(--font-cn-script);
+  font-size: clamp(13px, calc(var(--u) * 1.7), 18px);
+  line-height: 1.15;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.btn-en {
+  font-family: var(--font-en-serif);
+  font-style: italic;
+  font-size: clamp(9px, calc(var(--u) * 1.1), 12px);
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  color: var(--retro-gold-brown);
+  white-space: nowrap;
 }
 
 .hud__replay {
@@ -491,19 +554,28 @@ button {
   right: calc(var(--u) * 4);
   bottom: calc(var(--u) * 2.4);
   z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(var(--u) * 0.1);
   background: none;
   border: 0;
   cursor: pointer;
   padding: calc(var(--u) * 1);
   min-height: 44px;
-  color: #fff;
-  font-size: clamp(11px, calc(var(--u) * 1.25), 13px);
-  font-weight: 200;
-  letter-spacing: 0.2em;
-  opacity: 0.42;
-  transition: opacity 0.4s var(--ease-soft), text-shadow 0.4s;
-  /* taste-skill-ignore shadow: 与顶部 UI 同一套柔光语言 */
-  text-shadow: 0 0 calc(var(--u) * 1.4) rgba(var(--glow), 0.8); /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
+  color: var(--retro-ink-stroke);
+  opacity: 0.72;
+  transition: opacity 0.4s var(--ease-soft);
+}
+
+.hud__replay .btn-cn {
+  font-size: clamp(11px, calc(var(--u) * 1.3), 14px);
+}
+
+.hud__replay .btn-en {
+  color: var(--retro-ink-muted);
+  opacity: 1;
+  font-size: clamp(9px, calc(var(--u) * 1.02), 11px);
 }
 
 .hud__replay:hover {
@@ -518,7 +590,7 @@ button {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 9%;
+  bottom: 8%;
   z-index: 10;
   display: flex;
   justify-content: center;
@@ -527,56 +599,66 @@ button {
 .desk {
   position: relative;
   width: calc(var(--u) * 116);
-  max-width: 97vw;
+  /* 长凳是"一条凳子"，不能一直顶到画面两侧，否则读起来像地面 */
+  max-width: min(1120px, 90vw);
 }
 
-/* 桌面物品区：书与地球仪站在桌板上 */
+/* 桌面物品区：书与地球仪站在桌板上。
+   三件物件只占长凳中段，两侧各留一圈空台面——展台要有"摆"的余量，
+   摆满整条凳子就变回一张桌子了。 */
 .desk__items {
   position: relative;
+  /* 压在台面之上：物件底部的接触阴影要落到木板上，否则球是浮着的 */
+  z-index: 3;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: calc(var(--u) * 8);
-  height: calc(var(--u) * 34);
+  gap: calc(var(--u) * 5.5);
+  height: calc(var(--u) * 31);
   padding-bottom: calc(var(--u) * 0.4);
 }
 
 /* 桌板顶面：被压出来的薄薄一层受光面，比板材略宽，形成出檐 */
 .desk__top {
   position: relative;
-  height: calc(var(--u) * 2.2);
+  z-index: 2;
+  height: calc(var(--u) * 2);
   margin: 0 calc(var(--u) * -0.7);
-  border-radius: 50% 50% calc(var(--u) * 1.4) calc(var(--u) * 1.4) / 70% 70% calc(var(--u) * 1.4) calc(var(--u) * 1.4);
-  background: #e2c294;
-  box-shadow: /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
-    inset 0 calc(var(--u) * 0.3) 0 rgba(255, 250, 232, 0.7);
+  border: var(--toon-border);
+  border-bottom: 0;
+  border-radius: calc(var(--u) * 3) calc(var(--u) * 3) 0 0;
+  background: #f7efe0;
 }
 
 /* 桌板正面：一块厚木料，边缘不规则，像用手压过 */
 .desk__edge {
   position: relative;
-  height: calc(var(--u) * 7.4);
-  margin: 0 calc(var(--u) * -0.2);
-  border-radius: calc(var(--u) * 1.3) calc(var(--u) * 1.3) calc(var(--u) * 2.2) calc(var(--u) * 2.2) / calc(var(--u) * 1) calc(var(--u) * 1) calc(var(--u) * 2.6) calc(var(--u) * 2.6);
-  background-image: var(--grain), linear-gradient(to bottom, var(--wood) 0%, var(--wood) 56%, var(--wood-mid) 100%); /* taste-skill-ignore gradient: 木料上缘受光、下缘背光，是同一块材质的明度衰减 */
+  margin-top: calc(var(--toon-line) * -1);
+  height: calc(var(--u) * 5);
+  margin-left: calc(var(--u) * -0.2);
+  margin-right: calc(var(--u) * -0.2);
+  border: var(--toon-border);
+  border-top: 0;
+  border-radius: 0 0 calc(var(--u) * 2.6) calc(var(--u) * 2.6) / 0 0 calc(var(--u) * 3) calc(var(--u) * 3);
+  background-image: var(--grain), linear-gradient(to bottom, #f7efe0 0%, #e3d2b9 18%, #d5c4ac 55%, #c8b192 100%); /* taste-skill-ignore gradient: 台面转侧面的一次材质折角，上缘受光、往下走进背光 */
   background-size: calc(var(--u) * 17) calc(var(--u) * 17), 100% 100%;
-  background-blend-mode: normal, normal;
-  box-shadow: /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
-    inset 0 calc(var(--u) * 0.5) 0 rgba(255, 240, 208, 0.3),
-    inset 0 calc(var(--u) * -1.2) calc(var(--u) * 1.8) rgba(96, 68, 40, 0.5),
-    0 calc(var(--u) * 0.6) calc(var(--u) * 0.9) rgba(70, 96, 46, 0.3);
+  /* 实体切面厚度 + 厚度下方的墨线 + 落地弥散阴影 */
+  box-shadow:
+    0 calc(var(--u) * 1.1) 0 #c3ad8f, /* taste-skill-ignore shadow: 赛璐璐实心切面，木料自身厚度 */
+    0 calc(var(--u) * 1.1 + var(--toon-line)) 0 var(--retro-ink-stroke), /* taste-skill-ignore shadow: 切面底缘的墨线封边 */
+    0 calc(var(--u) * 2.8) calc(var(--u) * 2.6) rgba(45, 55, 72, 0.22); /* taste-skill-ignore shadow: 长凳落在草地上的弥散投影 */
 }
 
 /* 木料上的揉捏纹：几道横向的深浅，读起来是被手掌抹过的纸浆 */
 .desk__edge::before {
   content: '';
   position: absolute;
-  inset: 12% 5% 14% 4%;
+  inset: 6% 2.2% 8% 2.2%;
   border-radius: inherit;
   background:
-    radial-gradient(46% 16% at 24% 30%, rgba(120, 88, 54, 0.22), rgba(120, 88, 54, 0) 70%), /* taste-skill-ignore gradient: 木料揉捏纹的明暗起伏 */
-    radial-gradient(34% 14% at 68% 62%, rgba(120, 88, 54, 0.2), rgba(120, 88, 54, 0) 70%), /* taste-skill-ignore gradient: 同上 */
-    radial-gradient(30% 18% at 88% 34%, rgba(255, 240, 210, 0.3), rgba(255, 240, 210, 0) 70%); /* taste-skill-ignore gradient: 同上 */
+    radial-gradient(46% 26% at 24% 34%, rgba(120, 88, 54, 0.14), rgba(120, 88, 54, 0) 70%), /* taste-skill-ignore gradient: 木料揉捏纹的明暗起伏 */
+    radial-gradient(34% 22% at 68% 58%, rgba(120, 88, 54, 0.12), rgba(120, 88, 54, 0) 70%), /* taste-skill-ignore gradient: 同上 */
+    radial-gradient(30% 30% at 88% 30%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 70%); /* taste-skill-ignore gradient: 同上 */
   pointer-events: none;
 }
 
@@ -585,25 +667,27 @@ button {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: radial-gradient(120% 260% at 22% 0%, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0) 62%); /* taste-skill-ignore gradient: 顶面高光 */
+  background: radial-gradient(120% 260% at 22% 0%, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 62%); /* taste-skill-ignore gradient: 顶面高光 */
   pointer-events: none;
 }
 
 .desk__legs {
   position: relative;
-  height: calc(var(--u) * 13);
+  height: calc(var(--u) * 9);
 }
 
 /* 两条粗腿：正面平视下只看得见前腿，后腿被完全挡住，所以只做两条 */
 .desk__leg {
   position: absolute;
   bottom: 0;
-  width: calc(var(--u) * 6.6);
+  width: calc(var(--u) * 4.6);
   height: 100%;
-  border-radius: calc(var(--u) * 0.8) calc(var(--u) * 0.8) calc(var(--u) * 1.2) calc(var(--u) * 1.2);
-  background: linear-gradient(to right, var(--wood-lit) 0%, var(--wood) 42%, var(--wood-mid) 100%); /* taste-skill-ignore gradient: 圆柱形桌腿的受光面与背光面 */
-  box-shadow: /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
-    inset 0 calc(var(--u) * -1) calc(var(--u) * 1.6) rgba(96, 68, 40, 0.4);
+  border: var(--toon-border);
+  border-top: 0;
+  border-radius: 0 0 calc(var(--u) * 1.2) calc(var(--u) * 1.2);
+  background: var(--retro-wood-side);
+  /* 右半侧压一道暗面，圆腿就立起来了 */
+  box-shadow: inset calc(var(--u) * -1.4) 0 0 var(--retro-wood-deep); /* taste-skill-ignore shadow: 圆柱凳腿的背光侧，用内阴影代替第二块多边形 */
 }
 
 .desk__leg--fl {
@@ -693,8 +777,8 @@ button {
 .book {
   position: relative;
   flex: 0 0 auto;
-  width: calc(var(--u) * 26);
-  height: calc(var(--u) * 33);
+  width: calc(var(--u) * 24);
+  height: calc(var(--u) * 30);
   padding: 0;
   border: 0;
   background: none;
@@ -758,38 +842,31 @@ button {
 .book__cover {
   position: absolute;
   inset: 0 calc(var(--u) * 1.7) 0 0;
+  border: var(--toon-border);
   border-radius: calc(var(--u) * 0.8) calc(var(--u) * 1.4) calc(var(--u) * 1.4) calc(var(--u) * 0.8);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: calc(var(--u) * 1);
-  padding: calc(var(--u) * 2) calc(var(--u) * 1.6);
+  gap: calc(var(--u) * 0.5);
+  padding: calc(var(--u) * 1.8) calc(var(--u) * 1.2) calc(var(--u) * 1.6);
   overflow: hidden;
 }
 
 .book--note .book__cover {
-  background: var(--rose);
-  box-shadow: /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
-    inset 0 calc(var(--u) * 0.4) 0 rgba(255, 214, 200, 0.3),
-    inset calc(var(--u) * -1) 0 calc(var(--u) * 1.6) rgba(112, 50, 46, 0.5),
-    inset calc(var(--u) * 1.1) 0 calc(var(--u) * 1.6) rgba(255, 196, 184, 0.22),
-    inset 0 calc(var(--u) * -1.1) calc(var(--u) * 1.6) rgba(126, 62, 58, 0.32),
-    0 calc(var(--u) * 1.15) 0 #ddcba4,
-    0 calc(var(--u) * 1.15) 0 rgba(120, 88, 52, 0.28),
-    0 calc(var(--u) * 1.6) calc(var(--u) * 1.4) rgba(92, 58, 34, 0.4);
+  background: var(--retro-pink);
+  box-shadow: /* taste-skill-ignore shadow: 封面侧边压一道背光暗面，是这块纸板自己的厚度 */
+    inset calc(var(--u) * -1.3) 0 0 var(--retro-pink-shade),
+    0 calc(var(--u) * 1.15) 0 #efe6d6,
+    0 calc(var(--u) * 1.5) calc(var(--u) * 1.6) rgba(45, 55, 72, 0.18);
 }
 
 .book--album .book__cover {
-  background: var(--blush);
-  box-shadow: /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
-    inset 0 calc(var(--u) * 0.4) 0 rgba(255, 232, 218, 0.2),
-    inset calc(var(--u) * -1) 0 calc(var(--u) * 1.6) rgba(140, 94, 78, 0.5),
-    inset calc(var(--u) * 1.1) 0 calc(var(--u) * 1.6) rgba(255, 216, 202, 0.22),
-    inset 0 calc(var(--u) * -1.1) calc(var(--u) * 1.6) rgba(154, 106, 88, 0.3),
-    0 calc(var(--u) * 1.15) 0 #ddcba4,
-    0 calc(var(--u) * 1.15) 0 rgba(120, 88, 52, 0.28),
-    0 calc(var(--u) * 1.6) calc(var(--u) * 1.4) rgba(92, 58, 34, 0.4);
+  background: var(--retro-paper-bg);
+  box-shadow: /* taste-skill-ignore shadow: 米白相册没有彩色，靠侧边灰暗面与纸页厚度立起来 */
+    inset calc(var(--u) * -1.3) 0 0 #e6dfd3,
+    0 calc(var(--u) * 1.15) 0 #efe6d6,
+    0 calc(var(--u) * 1.5) calc(var(--u) * 1.6) rgba(45, 55, 72, 0.16);
 }
 
 /* 封面的整体受光：左上亮、右下暗，让平面有鼓起的体积 */
@@ -799,7 +876,7 @@ button {
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background: radial-gradient(86% 72% at 30% 16%, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0) 62%); /* taste-skill-ignore gradient: 黏土球体/光斑的明暗过渡只能靠渐变，这是 3D 捏制质感的物理依据 */
+  background: radial-gradient(86% 72% at 30% 16%, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 62%); /* taste-skill-ignore gradient: 黏土球体/光斑的明暗过渡只能靠渐变，这是 3D 捏制质感的物理依据 */
 }
 
 .book__cover::after {
@@ -813,6 +890,7 @@ button {
   opacity: 0.19;
 }
 
+/* 书脊：左侧一道压进去的暗面 + 一条虚线装订缝（手帐摊在桌上装订线露出来的样子） */
 .book__spine {
   position: absolute;
   left: 0;
@@ -820,8 +898,16 @@ button {
   bottom: 0;
   width: calc(var(--u) * 2.2);
   border-radius: calc(var(--u) * 0.8) 0 0 calc(var(--u) * 0.8);
-  background: rgba(60, 26, 24, 0.14);
-  box-shadow: inset calc(var(--u) * 0.35) 0 0 rgba(255, 255, 255, 0.26); /* taste-skill-ignore shadow: 书脊的转折高光 */
+  background: rgba(60, 26, 24, 0.1);
+}
+
+.book__spine::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 6%;
+  bottom: 6%;
+  border-left: var(--toon-line) dashed rgba(45, 55, 72, 0.35);
 }
 
 /* 书名直接压印在封面上，没有底板 */
@@ -837,20 +923,35 @@ button {
   position: relative;
   z-index: 2;
   margin: 0;
-  color: #fff7e8;
-  font-size: clamp(11px, calc(var(--u) * 2.05), 21px);
-  font-weight: 600;
-  line-height: 1.4;
-  letter-spacing: 0.04em;
+  font-family: var(--font-cn-script);
+  color: #5d4037;
+  font-size: clamp(11px, calc(var(--u) * 1.95), 21px);
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
   /* 书名要么一行读完，要么两行字数匀开，绝不在"手|账"这种地方断 */
   text-wrap: balance;
-  /* taste-skill-ignore shadow: 烫金压印在封面上的字，用金色高光交代烫印质感 */
-  text-shadow: 0 calc(var(--u) * 0.08) 0 rgba(180, 120, 60, 0.4), 0 0 calc(var(--u) * 0.9) rgba(255, 226, 170, 0.35); /* taste-skill-ignore shadow: 烫金文字的金色微光，需求指定的高对比烫印质感 */
+}
+
+/* 英文书名：花体，压在同一块封面上当题跋 */
+.book__en {
+  display: block;
+  position: relative;
+  z-index: 2;
+  font-family: var(--font-en-script);
+  font-size: clamp(8px, calc(var(--u) * 1.85), 19px);
+  line-height: 1.1;
+  color: #8d6e63;
+  /* 花体本身很细，窄屏会糊，给一点极淡的描边稳住字面 */
+  -webkit-text-stroke: 0.2px rgba(141, 110, 99, 0.4);
 }
 
 .book--album .book__label {
-  color: #5b4634;
-  text-shadow: 0 calc(var(--u) * 0.08) 0 rgba(255, 244, 220, 0.55); /* taste-skill-ignore shadow: 杏色封面上的深色烫字用浅色高光提对比 */
+  color: #3e3835;
+}
+
+.book--album .book__en {
+  color: #7a726d;
 }
 
 /* 书名下的一行小字：仍用封面色的深调，像印上去而不是 UI */
@@ -858,27 +959,33 @@ button {
   position: relative;
   z-index: 2;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: center;
-  gap: 0.6em;
-  color: rgba(122, 56, 52, 0.62);
-  font-size: clamp(8px, calc(var(--u) * 1.02), 11px);
-  font-weight: 400;
-  letter-spacing: 0.1em;
+  gap: 0.5em;
+  margin-top: calc(var(--u) * 1.4);
+  padding-top: calc(var(--u) * 0.6);
+  border-top: 1px solid rgba(121, 85, 72, 0.28);
+  color: #795548;
+  font-family: var(--font-en-serif);
+  font-size: clamp(8px, calc(var(--u) * 1.12), 12px);
+  font-style: italic;
+  letter-spacing: 0.04em;
 }
 
 .book--album .book__foot {
-  color: rgba(116, 66, 53, 0.72);
+  color: #8c6d62;
+  border-top-color: rgba(140, 109, 98, 0.26);
 }
 
-/* 金属包角（相册）：磨砂银，带一颗铆钉 */
+/* 金属包角（相册）：米色铜片 + 墨线封边，与长凳同一套插画语言 */
 .corner {
   position: absolute;
-  width: calc(var(--u) * 3.4);
-  height: calc(var(--u) * 3.4);
+  width: calc(var(--u) * 2.8);
+  height: calc(var(--u) * 2.8);
   z-index: 3;
-  background: linear-gradient(135deg, #e2e4dc, #c2c5bb 50%, #a2a79b); /* taste-skill-ignore gradient: 金属面高光的方向性 */
-  filter: drop-shadow(0 calc(var(--u) * 0.12) calc(var(--u) * 0.22) rgba(52, 44, 34, 0.4)); /* taste-skill-ignore shadow: 金属片压在布面上需要分离 */
+  border: max(1.2px, calc(var(--toon-line) * 0.7)) solid rgba(45, 55, 72, 0.55);
+  background: #ece3d5;
+  filter: drop-shadow(0 calc(var(--u) * 0.18) 0 rgba(45, 55, 72, 0.22)); /* taste-skill-ignore shadow: 金属片压在纸面上需要脱离投影 */
 }
 
 .corner--tl {
@@ -973,8 +1080,40 @@ button {
 .globe-slot {
   position: relative;
   flex: 0 0 auto;
-  width: calc(var(--u) * 32);
-  height: calc(var(--u) * 32);
+  width: calc(var(--u) * 28);
+  height: calc(var(--u) * 28);
+}
+
+/* 长凳正面的藏品牌：烫在木料上的两行小字，居中 */
+.bench-plate {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--u) * 0.05);
+  pointer-events: none;
+}
+
+.bench-plate__cn {
+  font-family: var(--font-cn-script);
+  font-size: clamp(10px, calc(var(--u) * 1.3), 14px);
+  line-height: 1.15;
+  letter-spacing: 0.14em;
+  color: #6b5544;
+  white-space: nowrap;
+}
+
+.bench-plate__en {
+  font-family: var(--font-en-serif);
+  font-style: italic;
+  font-size: clamp(8px, calc(var(--u) * 1), 11px);
+  line-height: 1.1;
+  letter-spacing: 0.08em;
+  color: #8c7562;
+  white-space: nowrap;
 }
 
 /* 地球仪坐在桌面上的接触阴影（3D 画布本身投不出影子） */
@@ -2021,6 +2160,36 @@ textarea.input {
 }
 
 /* ============================================================
+   矮视口：--u 只按宽度算，1024×625 这类笔记本屏会跟 1440 一样大，
+   展台顶到标题上。整块按高度缩，底部为原点，长凳始终踩在同一个位置。
+   ============================================================ */
+
+@media (max-height: 730px) {
+  .desk {
+    transform: scale(0.94);
+    transform-origin: bottom center;
+  }
+}
+
+@media (max-height: 700px) {
+  .desk {
+    transform: scale(0.86);
+  }
+}
+
+@media (max-height: 660px) {
+  .desk {
+    transform: scale(0.76);
+  }
+}
+
+@media (max-height: 600px) {
+  .desk {
+    transform: scale(0.66);
+  }
+}
+
+/* ============================================================
    窄屏：书桌等比缩小，书本文字单行变两行仍可读
    ============================================================ */
 
@@ -2039,13 +2208,13 @@ textarea.input {
   }
 
   .desk__items {
-    gap: calc(var(--u) * 4.2);
-    height: calc(var(--u) * 28);
+    gap: calc(var(--u) * 3.6);
+    height: calc(var(--u) * 25);
   }
 
   .book {
-    width: calc(var(--u) * 22);
-    height: calc(var(--u) * 26);
+    width: calc(var(--u) * 18);
+    height: calc(var(--u) * 24);
   }
 
   .globe-slot {
@@ -2079,21 +2248,22 @@ textarea.input {
     max-width: none;
   }
 
-  /* 只放大桌面上的一组静物，桌板仍旧满幅，视觉上像贴近桌沿站着看 */
+  /* 只放大桌面上的一组静物，桌板仍旧满幅，视觉上像贴近桌沿站着看。
+     竖屏宽 390 时 --u≈4.3px，三件物品合计约 80u 正好占满屏宽九成。 */
   .desk__items {
-    --u: clamp(4.2px, 1.26vw, 5px);
-    gap: calc(var(--u) * 2.2);
-    height: calc(var(--u) * 39);
+    --u: clamp(3.9px, 1.1vw, 5px);
+    gap: calc(var(--u) * 3);
+    height: calc(var(--u) * 34);
   }
 
   .book {
     width: calc(var(--u) * 24);
-    height: calc(var(--u) * 33);
+    height: calc(var(--u) * 30);
   }
 
   .globe-slot {
-    width: calc(var(--u) * 25);
-    height: calc(var(--u) * 25);
+    width: calc(var(--u) * 26);
+    height: calc(var(--u) * 26);
   }
 
   .hud {
@@ -2113,9 +2283,17 @@ textarea.input {
 
   .hud__action {
     --u: 7px;
-    padding: calc(var(--u) * 1) calc(var(--u) * 2.2);
-    font-size: 13px;
-    letter-spacing: 0.1em;
+    padding: calc(var(--u) * 1) calc(var(--u) * 1.9);
+  }
+
+  /* 竖屏长凳出血到 106vw，右下角正好被凳子压住，
+     给这行微文本加一层纸白胶囊，压在什么都读得清 */
+  .hud__replay {
+    bottom: calc(var(--u) * 2);
+    padding: calc(var(--u) * 0.7) calc(var(--u) * 1.8);
+    border: max(1px, calc(var(--toon-line) * 0.6)) solid rgba(45, 55, 72, 0.3);
+    border-radius: 999px;
+    background: rgba(250, 247, 242, 0.88);
   }
 
   /* 树冠在窄屏上收窄，别把标题吞掉 */
@@ -4715,21 +4893,18 @@ textarea.input {
   pointer-events: none;
 }
 
-/* 工作台入口比「上传课题」轻一档：它是探索入口，不是主行动 */
+/* 工作台入口比「上传课题」轻一档：它是探索入口，不是主行动。
+   原来靠「无边框文字 + 小星芒」分主次，改成药丸后改用底色分：
+   主行动纯白，次行动半透明奶白，厚度一样、明度退一档。 */
 .hud__action--studio {
-  font-size: clamp(12px, calc(var(--u) * 1.85), 19px);
-  letter-spacing: 0.16em;
-  opacity: 0.9;
+  background: rgba(255, 255, 255, 0.9);
 }
 
-.hud__action--studio::before {
-  width: calc(var(--u) * 1.1);
-  height: calc(var(--u) * 1.1);
-  background: #eaffdf;
-  box-shadow: 0 0 calc(var(--u) * 1.4) rgba(214, 255, 200, 0.9),
-    0 0 calc(var(--u) * 2.8) rgba(168, 230, 140, 0.5);
+.hud__action--studio .btn-cn {
+  font-size: clamp(12px, calc(var(--u) * 1.55), 17px);
+  letter-spacing: 0.05em;
 }
 
 .hud__action--studio:hover {
-  opacity: 1;
+  background: #ffffff;
 }

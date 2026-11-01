@@ -296,22 +296,34 @@ export default function MainLawn({
       <div className="scene__glow" aria-hidden="true" />
       <Fireflies />
 
-      {/* 顶部 UI：无边框，白字压一圈奶油描边，直接坐在树冠上 */}
+      {/* 顶部 UI：中文手写 + 英文斜体两行，压一圈奶油描边直接坐在树冠上 */}
       <header className="hud">
         <h1 className="hud__title">
           <span className="hud__kicker">童眼看世界 · 行智开物</span>
+          <span className="hud__kicker-en" lang="en">
+            Through Children&apos;s Eyes · Mind &amp; Craft
+          </span>
           <span className="hud__headline">成果展示</span>
+          <span className="hud__headline-en" lang="en">
+            Selected Artifacts &amp; Works
+          </span>
         </h1>
         <div className="hud__right">
           <button type="button" className="hud__action" onClick={onOpenUpload}>
-            上传课题
+            <span className="btn-cn">上传课题</span>
+            <span className="btn-en" lang="en">
+              Submit Research
+            </span>
           </button>
           <button
             type="button"
             className="hud__action hud__action--studio"
             onClick={onOpenStudio}
           >
-            感官工作台
+            <span className="btn-cn">感官工作台</span>
+            <span className="btn-en" lang="en">
+              Sensory Atelier
+            </span>
           </button>
         </div>
       </header>
@@ -332,7 +344,10 @@ export default function MainLawn({
       </div>
 
       <button type="button" className="hud__replay" onClick={onReplay}>
-        重温开场
+        <span className="btn-cn">重温开场</span>
+        <span className="btn-en" lang="en">
+          Replay Prologue
+        </span>
       </button>
     </div>
 
