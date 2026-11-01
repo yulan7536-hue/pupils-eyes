@@ -16,8 +16,43 @@ import { analyzeLesson, analyzeLessonSync } from './utils/aiLesson';
 /** 四阶段时间轴：开场 → 追光 → 主场景 → 沉浸交互 */
 type Step = 'INTRO' | 'CHASE' | 'LAWN';
 
+// 《古墓丽影》风格文物数据库（新增）
+const artifactDatabase: Record<string, {
+  titleCn: string;
+  titleEn: string;
+  region: string;
+  style: string;
+  desc: string;
+  color: number;
+}> = {
+  pavilion: {
+    titleCn: '中式开放水榭凉亭',
+    titleEn: 'Chinese Open-Air Water Pavilion',
+    region: '亚洲 · 中国江南水乡与西南侗寨',
+    style: '传统木构榫卯 · 歇山飞檐翼角',
+    desc: '四面通透敞开，设有美人靠雕花围栏与穿斗式梁柱。飞檐起翘如鸟翼，夜幕下悬挂暖光八角宫灯，倒映于清幽水面之上。',
+    color: 0xd59b57
+  },
+  arch: {
+    titleCn: '古罗马科林斯石柱拱门',
+    titleEn: 'Greco-Roman Colonnade Arch',
+    region: '欧洲 · 地中海古典文明',
+    style: '古典柱式架构 · 大理石凿刻拱券',
+    desc: '采用精美复合柱头，石质厚重温润。圆拱两侧环绕着常春藤蔓，象征时间与古文明的永恒对话。',
+    color: 0xd8d4cb
+  },
+  opera: {
+    titleCn: '悉尼歌剧院帆影拱顶',
+    titleEn: 'Sydney Opera House Vaulted Sails',
+    region: '大洋洲 · 澳大利亚悉尼海湾',
+    style: '现代表现主义 · 仿生贝壳薄壳结构',
+    desc: '约恩·乌松设计的世界文化遗产。层叠交错的风帆状薄壳如白珍珠贝母般排列，迎风展翅于海港水畔。',
+    color: 0xf0f3f6
+  }
+};
+
 export default function App() {
-  // #lawn 可直接落到主场景；#note / #album 直接翻开对应书本，#studio 直接进工作台
+  // 原有状态：全量保留
   const [step, setStep] = useState<Step>(() =>
     typeof window !== 'undefined' && ['#lawn', '#note', '#album', '#studio'].includes(window.location.hash)
       ? 'LAWN'
@@ -27,7 +62,7 @@ export default function App() {
   const [pins, setPins] = useState<PinItem[]>(() => loadSavedPins());
   const [works, setWorks] = useState<WorkItem[]>(() => loadSavedWorks());
 
-  // 给历史教案惰性补上六维雷达图（老数据没有 radar 字段）
+  // 原有大模型教案雷达图逻辑：全量保留
   useEffect(() => {
     setWorks((prev) => {
       let changed = false;
@@ -53,7 +88,6 @@ export default function App() {
   );
   const [sheet, setSheet] = useState<WorkItem | null>(null);
 
-  /** 行智开物 × 童眼工作台：感官打捞 + 四维打磨，覆盖在课桌之上 */
   const [studio, setStudio] = useState<boolean>(
     () => typeof window !== 'undefined' && window.location.hash === '#studio'
   );
@@ -65,6 +99,10 @@ export default function App() {
   const [burstAt, setBurstAt] = useState<{ x: number; y: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  // 新增：3D 文物全景检视器激活状态
+  const [activeArtifactKey, setActiveArtifactKey] = useState<string | null>(null);
+  const viewerMountRef = useRef<HTMLDivElement>(null);
+
   const timers = useRef<number[]>([]);
   const later = useCallback((fn: () => void, ms: number) => {
     timers.current.push(window.setTimeout(fn, ms));
@@ -75,7 +113,6 @@ export default function App() {
     return () => t.forEach((id) => window.clearTimeout(id));
   }, []);
 
-  /* 工作台开成整屏时，Esc 直接退回课桌 */
   useEffect(() => {
     if (!studio) return;
     const onKey = (e: KeyboardEvent) => {
@@ -98,8 +135,7 @@ export default function App() {
     later(() => setToast(null), 4200);
   };
 
-  /* ---------------- 阶段 4：上传课题三步 ---------------- */
-
+  /* ---------------- 上传课题全流程：全量保留 ---------------- */
   const openUpload = () => {
     storySound.playPaperTurn();
     setRegionOpen(true);
@@ -112,12 +148,9 @@ export default function App() {
   ) => {
     setRegionOpen(false);
     setDraftLoc({ ...details, lat: coord.lat, lon: coord.lon, locationString });
-
-    // 地球仪居中放大并转向落点，背景同时被高斯模糊
     setGlobeOpen(true);
     setTarget(coord);
 
-    // 特写：图钉"啪"地钉上去
     later(() => {
       const id = `draft-${Date.now()}`;
       setPins((prev) => [
@@ -138,7 +171,6 @@ export default function App() {
       setBurst(true);
       later(() => setBurst(false), 1350);
       later(() => setNewPinId(null), 3200);
-      // 身份弹窗要等「落钉特写」演完再进来，否则高斯模糊会把这一镜头吃掉
       later(() => setRoleOpen(true), 2350);
     }, 780);
   };
@@ -177,15 +209,12 @@ export default function App() {
     setNewPinId(pin.id);
     setWorks((prev) => [work, ...prev]);
 
-    // 教师教案：上传时若已跑过大模型解析就直接采用，否则异步补算并覆盖规则引擎结果
     if (payload.role === 'TEACHER' && payload.radar?.source !== 'ai') {
       analyzeLesson(payload.content)
         .then((analysis) => {
           setWorks((prev) => prev.map((w) => (w.id === work.id ? { ...w, radar: analysis } : w)));
         })
-        .catch(() => {
-          /* 兜底已就位，静默即可 */
-        });
+        .catch(() => {});
     }
 
     setRoleOpen(false);
@@ -193,8 +222,6 @@ export default function App() {
     later(() => setNewPinId(null), 2400);
     say(`图钉已定格 · 童眼看 ${payload.district}`);
   };
-
-  /* ---------------- 阅读与点赞 ---------------- */
 
   const openPin = (pin: PinItem) => {
     const district = pin.city.split('·').pop() ?? '';
@@ -220,11 +247,107 @@ export default function App() {
     setStep('INTRO');
   };
 
+  // 新增：渲染 3D 检视器引擎
+  useEffect(() => {
+    if (!activeArtifactKey || !viewerMountRef.current) return;
+
+    let renderer: any, scene: any, camera: any, meshGroup: any, animId: number;
+
+    const setupThreeViewer = () => {
+      const container = viewerMountRef.current;
+      if (!container) return;
+      const THREE = (window as any).THREE;
+      if (!THREE) return;
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+      camera.position.set(0, 1.8, 6.5);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      container.appendChild(renderer.domElement);
+
+      const OrbitControls = (window as any).THREE.OrbitControls;
+      let controls: any;
+      if (OrbitControls) {
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+      }
+
+      scene.add(new THREE.AmbientLight(0xfff5e6, 0.7));
+      const dirLight = new THREE.DirectionalLight(0xffecd2, 1.3);
+      dirLight.position.set(5, 8, 5);
+      scene.add(dirLight);
+
+      meshGroup = new THREE.Group();
+      const currentData = artifactDatabase[activeArtifactKey];
+      const toonMat = new THREE.MeshToonMaterial({ color: currentData.color });
+
+      if (activeArtifactKey === 'pavilion') {
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(2, 1.2, 4), toonMat);
+        roof.position.y = 1.1;
+        roof.rotation.y = Math.PI / 4;
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.8, 0.35, 8), toonMat);
+        base.position.y = -1;
+        meshGroup.add(roof, base);
+      } else if (activeArtifactKey === 'opera') {
+        for (let i = 0; i < 3; i++) {
+          const sail = new THREE.Mesh(new THREE.ConeGeometry(1.3 - i * 0.28, 2.2 - i * 0.35, 3), toonMat);
+          sail.position.set(-0.7 + i * 0.7, -0.2 + i * 0.2, i * 0.18);
+          sail.rotation.z = -0.3;
+          meshGroup.add(sail);
+        }
+      } else {
+        const arch = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.24, 8, 24, Math.PI), toonMat);
+        arch.position.y = 0.5;
+        const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 2, 12), toonMat);
+        p1.position.set(-1.2, -0.5, 0);
+        const p2 = p1.clone();
+        p2.position.set(1.2, -0.5, 0);
+        meshGroup.add(arch, p1, p2);
+      }
+
+      scene.add(meshGroup);
+
+      const renderLoop = () => {
+        animId = requestAnimationFrame(renderLoop);
+        if (controls) controls.update();
+        if (meshGroup) meshGroup.rotation.y += 0.003;
+        renderer.render(scene, camera);
+      };
+      renderLoop();
+    };
+
+    if (!(window as any).THREE) {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+      script.onload = () => {
+        const controlScript = document.createElement('script');
+        controlScript.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+        controlScript.onload = setupThreeViewer;
+        document.head.appendChild(controlScript);
+      };
+      document.head.appendChild(script);
+    } else {
+      setupThreeViewer();
+    }
+
+    return () => {
+      cancelAnimationFrame(animId);
+      if (renderer && renderer.domElement) {
+        renderer.domElement.remove();
+      }
+    };
+  }, [activeArtifactKey]);
+
   const modalOpen = book !== null || sheet !== null;
+  const currentArtifact = activeArtifactKey ? artifactDatabase[activeArtifactKey] : null;
 
   return (
     <>
-      {/* 阶段 1：10 秒开场，结束后淡出接入全黑 */}
+      {/* 阶段 1：开场视频全量保留 */}
       {step === 'INTRO' && (
         <OpeningVideo
           onComplete={() => {
@@ -234,7 +357,7 @@ export default function App() {
         />
       )}
 
-      {/* 阶段 3 / 4：主场景。在追光阶段就预先挂上，让白光散开时场景已就绪 */}
+      {/* 阶段 3 / 4：主场景（长凳、草坪与地球仪） */}
       {step !== 'INTRO' && (
         <MainLawn
           pins={pins}
@@ -259,10 +382,11 @@ export default function App() {
           }}
           onSelectPin={openPin}
           onReplay={replay}
+          onInspectArtifact={(key: string) => setActiveArtifactKey(key)}
         />
       )}
 
-      {/* 行智开物 × 童眼工作台：感官打捞（行）+ 四维打磨（开物） */}
+      {/* 工作台全量保留 */}
       {studio && (
         <XingzhiStudio
           onClose={() => {
@@ -279,7 +403,7 @@ export default function App() {
         />
       )}
 
-      {/* 阶段 2：光晕追光 */}
+      {/* 阶段 2：追光全量保留 */}
       {chaseAlive && (
         <LightChase
           onReveal={() => setStep('LAWN')}
@@ -287,6 +411,7 @@ export default function App() {
         />
       )}
 
+      {/* 翻书与作品详情全量保留 */}
       {book && (
         <BookSpread
           book={book}
@@ -339,6 +464,45 @@ export default function App() {
       )}
 
       {burst && <PinBurst at={burstAt} />}
+
+      {/* 新增：《古墓丽影》风格 3D 文物全局检视弹窗 */}
+      {currentArtifact && (
+        <div className="tr-modal-overlay" onClick={() => setActiveArtifactKey(null)}>
+          <div className="tr-modal-container" onClick={(e) => e.stopPropagation()}>
+            <aside className="tr-info-panel">
+              <div className="tr-panel-tag">ARTIFACT ARCHIVE · 文物档案</div>
+              <h2 className="tr-title-cn">{currentArtifact.titleCn}</h2>
+              <div className="tr-title-en">{currentArtifact.titleEn}</div>
+
+              <div className="tr-meta-grid">
+                <div className="meta-item">
+                  <span className="meta-label">地理区域 / Region</span>
+                  <span className="meta-val">{currentArtifact.region}</span>
+                </div>
+                <div className="meta-item">
+                  <span className="meta-label">建筑风格 / Style</span>
+                  <span className="meta-val">{currentArtifact.style}</span>
+                </div>
+              </div>
+
+              <div className="tr-description-box">
+                <div className="desc-heading">造型与工艺特征 / Features</div>
+                <p className="desc-content">{currentArtifact.desc}</p>
+              </div>
+
+              <div className="tr-tip-note">
+                <span>🖱️ 按住鼠标左键/右键拖拽可 360° 旋转观察，滚轮可缩放细节</span>
+              </div>
+            </aside>
+
+            <main className="tr-viewer-viewport" ref={viewerMountRef}>
+              <button className="tr-close-btn" onClick={() => setActiveArtifactKey(null)}>
+                ✕ 关闭
+              </button>
+            </main>
+          </div>
+        </div>
+      )}
 
       {toast && <div className="toast">{toast}</div>}
     </>
