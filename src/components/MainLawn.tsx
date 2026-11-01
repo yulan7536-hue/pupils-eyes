@@ -18,6 +18,8 @@ interface MainLawnProps {
   onPinAnchor: (at: { x: number; y: number } | null) => void;
   onOpenBook: (book: 'note' | 'album') => void;
   onOpenUpload: () => void;
+  /** 打开「行智开物 × 童眼」工作台（感官打捞 + 四维打磨） */
+  onOpenStudio: () => void;
   onSelectPin: (pin: PinItem) => void;
   onReplay: () => void;
 }
@@ -193,6 +195,7 @@ export default function MainLawn({
   onPinAnchor,
   onOpenBook,
   onOpenUpload,
+  onOpenStudio,
   onSelectPin,
   onReplay,
 }: MainLawnProps) {
@@ -299,9 +302,18 @@ export default function MainLawn({
           <span className="hud__kicker">童眼看世界 · 行智开物</span>
           <span className="hud__headline">成果展示</span>
         </h1>
-        <button type="button" className="hud__action" onClick={onOpenUpload}>
-          上传课题
-        </button>
+        <div className="hud__right">
+          <button type="button" className="hud__action" onClick={onOpenUpload}>
+            上传课题
+          </button>
+          <button
+            type="button"
+            className="hud__action hud__action--studio"
+            onClick={onOpenStudio}
+          >
+            感官工作台
+          </button>
+        </div>
       </header>
 
       <Desk

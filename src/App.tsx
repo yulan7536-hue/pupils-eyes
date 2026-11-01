@@ -6,6 +6,7 @@ import BookSpread from './components/BookSpread';
 import WorkSheet from './components/WorkSheet';
 import RegionDialog from './components/RegionDialog';
 import RoleDialog from './components/RoleDialog';
+import XingzhiStudio from './components/XingzhiStudio';
 import PinBurst from './components/PinBurst';
 import { loadSavedPins, loadSavedWorks, savePins, saveWorks } from './data/initialWorks';
 import type { LocationChoice, PinItem, SubmissionPayload, WorkItem } from './types';
@@ -16,9 +17,9 @@ import { analyzeLesson, analyzeLessonSync } from './utils/aiLesson';
 type Step = 'INTRO' | 'CHASE' | 'LAWN';
 
 export default function App() {
-  // #lawn 可直接落到主场景；#note / #album 直接翻开对应书本，便于逐屏校对
+  // #lawn 可直接落到主场景；#note / #album 直接翻开对应书本，#studio 直接进工作台
   const [step, setStep] = useState<Step>(() =>
-    typeof window !== 'undefined' && ['#lawn', '#note', '#album'].includes(window.location.hash)
+    typeof window !== 'undefined' && ['#lawn', '#note', '#album', '#studio'].includes(window.location.hash)
       ? 'LAWN'
       : 'INTRO'
   );
@@ -52,6 +53,11 @@ export default function App() {
   );
   const [sheet, setSheet] = useState<WorkItem | null>(null);
 
+  /** 行智开物 × 童眼工作台：感官打捞 + 四维打磨，覆盖在课桌之上 */
+  const [studio, setStudio] = useState<boolean>(
+    () => typeof window !== 'undefined' && window.location.hash === '#studio'
+  );
+
   const [regionOpen, setRegionOpen] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
   const [draftLoc, setDraftLoc] = useState<LocationChoice | null>(null);
@@ -68,6 +74,16 @@ export default function App() {
     const t = timers.current;
     return () => t.forEach((id) => window.clearTimeout(id));
   }, []);
+
+  /* 工作台开成整屏时，Esc 直接退回课桌 */
+  useEffect(() => {
+    if (!studio) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setStudio(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [studio]);
 
   useEffect(() => {
     saveWorks(works);
@@ -237,8 +253,29 @@ export default function App() {
             setBook(b);
           }}
           onOpenUpload={openUpload}
+          onOpenStudio={() => {
+            storySound.playPaperTurn();
+            setStudio(true);
+          }}
           onSelectPin={openPin}
           onReplay={replay}
+        />
+      )}
+
+      {/* 行智开物 × 童眼工作台：感官打捞（行）+ 四维打磨（开物） */}
+      {studio && (
+        <XingzhiStudio
+          onClose={() => {
+            storySound.playPaperTurn();
+            setStudio(false);
+          }}
+          onSync={(filled) => {
+            say(
+              filled >= 4
+                ? '四维打磨记录与童眼作品已同步至行智开物主平台【学生个人数字资产包】'
+                : `已同步 ${filled} 维记录，补齐四维才会生成完整作品档案`
+            );
+          }}
         />
       )}
 
