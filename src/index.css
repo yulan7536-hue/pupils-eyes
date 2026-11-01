@@ -4733,3 +4733,636 @@ textarea.input {
 .hud__action--studio:hover {
   opacity: 1;
 }
+
+/* ============================================================
+   绘本课桌 · 纯 CSS 三渲二桌面（ToonDesk）
+   ------------------------------------------------------------
+   与草坪场景并列的第二套入口：不建 WebGL 场景，整块立体感靠
+   2px 墨线 + 实体切面阴影 + 一张 12° 微俯角的台面撑起来。
+
+   类名统一 tdk- 前缀：项目里已有 .desk-stage / .book，
+   直接沿用方案里的 .desk-* 会撞在一起。
+   ============================================================ */
+
+.tdk {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--pe-bg-paper);
+  background-image:
+    radial-gradient(circle at 50% 16%, rgba(232, 241, 242, 0.95) 0%, transparent 68%),
+    linear-gradient(180deg, var(--pe-bg-mist) 0%, var(--pe-bg-paper) 62%);
+  color: var(--pe-ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;
+  user-select: none;
+  animation: tdk-in 0.45s var(--ease-soft) both;
+}
+
+@keyframes tdk-in {
+  from {
+    opacity: 0;
+    transform: scale(1.01);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tdk__aura {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--grain);
+  opacity: 0.045;
+  mix-blend-mode: multiply;
+}
+
+/* ---------------- 顶部：父子品牌 + 三个入口 ---------------- */
+.tdk__header {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 32px;
+}
+
+.tdk__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 18px;
+  background: #ffffff;
+  border: 2px solid var(--pe-ink);
+  border-radius: var(--pe-radius-pill);
+  box-shadow: 0 3px 0 var(--pe-ink);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tdk__brand-parent {
+  color: #6366f1;
+}
+
+.tdk__brand-divider {
+  color: #cbd5e1;
+}
+
+.tdk__brand-sub {
+  color: var(--pe-ink);
+}
+
+.tdk__tip {
+  margin: 0;
+  padding: 1px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pe-ink-soft);
+  background: rgba(255, 255, 255, 0.66);
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.tdk__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---------------- 舞台：12° 微俯角的桌面 ---------------- */
+.tdk__stage {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1400px;
+  padding: 10px 40px 54px;
+}
+
+.tdk__surface {
+  position: relative;
+  width: 100%;
+  max-width: 1120px;
+  min-height: clamp(380px, 48vh, 480px);
+  box-sizing: border-box;
+  padding: 44px 44px 48px;
+  background: #ffffff;
+  border: 3px solid var(--pe-ink);
+  /* 桌面厚度：16px 实体切面 + 一层散开的落地影 */
+  box-shadow: 0 16px 0 var(--pe-ink), 0 34px 48px rgba(45, 55, 72, 0.12);
+  border-radius: 38px;
+  transform: rotateX(12deg);
+  transform-style: preserve-3d;
+  display: grid;
+  grid-template-columns: 1fr 1.1fr 1fr;
+  /* 底对齐：三件物件像真的立在桌面上，标签落在同一条线；居中会让它们浮着 */
+  align-items: end;
+  gap: 18px;
+}
+
+/* ---------------- 物件通用 ---------------- */
+.tdk__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  background: none;
+  border: 0;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.tdk__item:hover {
+  transform: translateY(-12px) scale(1.03);
+}
+
+.tdk__item:active {
+  transform: translateY(-4px) scale(1.01);
+}
+
+.tdk__item:focus-visible .tdk__label {
+  box-shadow: 0 0 0 3px rgba(242, 167, 181, 0.55);
+  border-radius: 8px;
+}
+
+.tdk__tag {
+  margin-bottom: 24px;
+  padding: 3px 11px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--pe-ink);
+  background: #fff4d4;
+  border: 1.5px solid var(--pe-ink);
+  border-radius: var(--pe-radius-pill);
+  box-shadow: 0 2px 0 var(--pe-ink);
+  transition: background 0.2s var(--ease-soft);
+  white-space: nowrap;
+}
+
+.tdk__item:hover .tdk__tag {
+  background: var(--pe-clay-yellow);
+}
+
+.tdk__label {
+  margin-top: 16px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.tdk__meta {
+  margin-top: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--pe-ink-soft);
+  white-space: nowrap;
+}
+
+/* ---------------- 物件一：黏土地球仪 ---------------- */
+.tdk__globe-wrap {
+  position: relative;
+  width: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* 高度交给内容撑：写死 190 会让底座被 margin-top:auto 甩到很下面，中间空一截 */
+  padding-bottom: 4px;
+}
+
+.tdk__globe {
+  position: relative;
+  z-index: 2;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: var(--pe-clay-blue);
+  border: 2.5px solid var(--pe-ink);
+  overflow: hidden;
+  /* 赛璐璐硬断层：内阴影砍一刀，外圈压一道实体厚度 */
+  box-shadow: inset -14px -14px 0 #2c5777, 0 6px 0 var(--pe-ink);
+  animation: tdk-float 4s ease-in-out infinite alternate;
+}
+
+@keyframes tdk-float {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-6px);
+  }
+}
+
+.tdk__continent {
+  position: absolute;
+  background: var(--pe-clay-sage);
+  border: 1.5px solid var(--pe-ink);
+  border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+}
+
+.tdk__continent--a {
+  width: 64px;
+  height: 52px;
+  top: 23px;
+  left: 16px;
+}
+
+.tdk__continent--b {
+  width: 42px;
+  height: 40px;
+  right: 20px;
+  bottom: 16px;
+}
+
+.tdk__glint {
+  position: absolute;
+  top: 14px;
+  left: 23px;
+  width: 34px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 50%;
+  transform: rotate(-30deg);
+}
+
+.tdk__globe-stand {
+  position: absolute;
+  z-index: 1;
+  top: -8px;
+  width: 150px;
+  height: 150px;
+  border: 5px solid var(--pe-clay-pink);
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-radius: 50%;
+  transform: rotate(45deg);
+  filter: drop-shadow(0 2px 0 var(--pe-ink));
+}
+
+.tdk__globe-base {
+  z-index: 2;
+  width: 70px;
+  height: 14px;
+  margin-top: 13px;
+  background: var(--pe-clay-pink);
+  border: 2px solid var(--pe-ink);
+  border-radius: var(--pe-radius-pill);
+  box-shadow: 0 4px 0 var(--pe-ink);
+}
+
+/* 真球的落座位：正好压在 CSS 球上，放大时从这儿起飞 */
+.tdk__globe-slot {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 130px;
+  height: 130px;
+  margin-left: -65px;
+  pointer-events: none;
+}
+
+/* ---------------- 物件二：教案实录手帐 ---------------- */
+.tdk__notebook {
+  position: relative;
+  width: 190px;
+  height: 228px;
+}
+
+.tdk__bookmark {
+  position: absolute;
+  /* 露在封面外的只有上沿：靠加大内边距把文字顶到可见区，否则被封面吃掉一半 */
+  top: -20px;
+  padding: 4px 8px 12px;
+  font-size: 10px;
+  font-weight: 800;
+  border: 1.5px solid var(--pe-ink);
+  border-radius: 4px 4px 0 0;
+  box-shadow: 0 -2px 0 var(--pe-ink);
+  white-space: nowrap;
+}
+
+.tdk__bookmark--a {
+  left: 22px;
+  background: var(--pe-clay-pink);
+}
+
+.tdk__bookmark--b {
+  left: 58px;
+  background: var(--pe-clay-yellow);
+}
+
+.tdk__bookmark--c {
+  left: 94px;
+  background: var(--pe-clay-sage);
+}
+
+.tdk__cover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fce6eb;
+  border: 2.5px solid var(--pe-ink);
+  border-radius: 14px;
+  /* 左侧书脊 + 底部厚度 + 落地影 */
+  box-shadow: -8px 0 0 var(--pe-clay-pink-dark), 0 8px 0 var(--pe-ink),
+    0 16px 22px rgba(45, 55, 72, 0.1);
+}
+
+.tdk__stitch {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 20px;
+  border-left: 2px dashed var(--pe-ink);
+}
+
+.tdk__plate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 11px 18px;
+  background: #ffffff;
+  border: 2px solid var(--pe-ink);
+  border-radius: 12px;
+  box-shadow: 0 3px 0 var(--pe-ink);
+}
+
+.tdk__plate-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.tdk__plate-text {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.tdk__pages {
+  position: absolute;
+  top: 10px;
+  right: -6px;
+  bottom: 10px;
+  width: 7px;
+  background: var(--pe-bg-paper);
+  border: 1.5px solid var(--pe-ink);
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+}
+
+/* ---------------- 物件三：拍立得成果架 ---------------- */
+.tdk__easel {
+  position: relative;
+  width: 172px;
+  height: 206px;
+  transform: rotate(3deg);
+}
+
+.tdk__tape {
+  position: absolute;
+  top: -10px;
+  left: 44px;
+  z-index: 2;
+  width: 62px;
+  height: 16px;
+  background: rgba(255, 209, 71, 0.88);
+  border: 1px dashed var(--pe-ink);
+  transform: rotate(-6deg);
+}
+
+.tdk__polaroid {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 12px 12px 18px;
+  background: #ffffff;
+  border: 2.5px solid var(--pe-ink);
+  border-radius: 14px;
+  box-shadow: 0 6px 0 var(--pe-ink), 0 14px 22px rgba(45, 55, 72, 0.08);
+}
+
+.tdk__thumb {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  overflow: hidden;
+  background: #e2ece8;
+  border: 1.5px solid var(--pe-ink);
+  border-radius: 10px;
+}
+
+.tdk__art {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.tdk__art--empty {
+  font-weight: 600;
+  color: var(--pe-ink-soft);
+}
+
+.tdk__caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tdk__author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tdk__pill {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  font-size: 10px;
+  background: #fce6eb;
+  border: 1px solid var(--pe-ink);
+  border-radius: var(--pe-radius-pill);
+  white-space: nowrap;
+}
+
+/* ---------------- 台面小物件 ---------------- */
+.tdk__decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tdk__pencil {
+  position: absolute;
+  bottom: 26px;
+  left: 6%;
+  width: 96px;
+  height: 11px;
+  background: var(--pe-clay-yellow);
+  border: 1.5px solid var(--pe-ink);
+  border-radius: 3px var(--pe-radius-pill) var(--pe-radius-pill) 3px;
+  box-shadow: 0 3px 0 var(--pe-ink);
+  transform: rotate(-9deg);
+}
+
+.tdk__pencil::before {
+  content: '';
+  position: absolute;
+  top: -1.5px;
+  left: -10px;
+  width: 0;
+  height: 0;
+  border-top: 5.5px solid transparent;
+  border-bottom: 5.5px solid transparent;
+  border-right: 10px solid #f3d9bd;
+}
+
+.tdk__pencil::after {
+  content: '';
+  position: absolute;
+  top: 2.5px;
+  right: 100%;
+  width: 6px;
+  height: 3px;
+  background: var(--pe-ink);
+  border-radius: 1px;
+  transform: translateX(4px);
+}
+
+.tdk__pebble {
+  position: absolute;
+  right: 7%;
+  bottom: 22px;
+  width: 34px;
+  height: 22px;
+  background: #e3e8ec;
+  border: 1.5px solid var(--pe-ink);
+  border-radius: 50% 50% 46% 54% / 62% 58% 42% 38%;
+  box-shadow: 0 3px 0 var(--pe-ink);
+}
+
+/* ---------------- 真球静止时隐身（课桌上已画了一颗 CSS 球） ---------------- */
+.globe-layer[data-idle='true'][data-zoomed='false'] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------------- 窄屏：拆掉透视，三件套竖向堆叠 ---------------- */
+@media (max-width: 1080px) {
+  .tdk__tip {
+    display: none;
+  }
+
+  .tdk__surface {
+    padding: 40px 30px 48px;
+    gap: 14px;
+  }
+}
+
+@media (max-width: 900px) {
+  .tdk {
+    overflow-y: auto;
+  }
+
+  .tdk__header {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px 16px;
+  }
+
+  .tdk__stage {
+    perspective: none;
+    align-items: flex-start;
+    padding: 8px 14px 36px;
+  }
+
+  .tdk__surface {
+    transform: none;
+    grid-template-columns: 1fr;
+    gap: 36px;
+    min-height: 0;
+    padding: 30px 18px 40px;
+    border-radius: 28px;
+    /* 竖向堆叠时桌面厚度收薄一点，否则像一块厚砖 */
+    box-shadow: 0 10px 0 var(--pe-ink), 0 22px 32px rgba(45, 55, 72, 0.12);
+  }
+
+  .tdk__item:hover {
+    transform: none;
+  }
+
+  .tdk__decor {
+    display: none;
+  }
+
+  .tdk__actions .toon-btn {
+    padding: 8px 14px;
+    font-size: 12.5px;
+  }
+}
+
+@media (max-width: 560px) {
+  .tdk__brand {
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+
+  .tdk__actions {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .tdk__actions .toon-btn {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+}
+
+/* 课桌上的关闭按钮：纸白底上必须换成墨线版，奶白圆片会完全隐形 */
+.globe-close--toon {
+  background: #ffffff;
+  color: var(--pe-ink);
+  border: 2px solid var(--pe-ink);
+  box-shadow: 0 4px 0 var(--pe-ink), 0 8px 16px rgba(45, 55, 72, 0.14);
+}
+
+.globe-close--toon:hover {
+  background: var(--pe-clay-yellow);
+  transform: translateY(-1px);
+}
+
+.globe-close--toon:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--pe-ink);
+}

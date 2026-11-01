@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
+import { useMemo, useRef } from 'react';
 import Desk from './Desk';
 import Canopy from './Canopy';
-import ClayGlobe from './ClayGlobe';
+import GlobeStage from './GlobeStage';
 import type { PinItem, WorkItem } from '../types';
 
 interface MainLawnProps {
@@ -20,6 +19,8 @@ interface MainLawnProps {
   onOpenUpload: () => void;
   /** 打开「行智开物 × 童眼」工作台（感官打捞 + 四维打磨） */
   onOpenStudio: () => void;
+  /** 切到绘本课桌（纯 CSS 3D 桌面） */
+  onOpenDesk: () => void;
   onSelectPin: (pin: PinItem) => void;
   onReplay: () => void;
 }
@@ -196,64 +197,14 @@ export default function MainLawn({
   onOpenBook,
   onOpenUpload,
   onOpenStudio,
+  onOpenDesk,
   onSelectPin,
   onReplay,
 }: MainLawnProps) {
   const slotRef = useRef<HTMLDivElement | null>(null);
-  const [globeSize, setGlobeSize] = useState(600);
-  const [dock, setDock] = useState({ x: 0, y: 0, scale: 0.3 });
-  const [hover, setHover] = useState<{ pin: PinItem; x: number; y: number } | null>(null);
 
   const noteCount = useMemo(() => works.filter((w) => w.role === 'TEACHER').length, [works]);
   const albumCount = useMemo(() => works.filter((w) => w.role === 'STUDENT').length, [works]);
-
-  // Esc 退出地球仪放大
-  useEffect(() => {
-    if (!globeOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onToggleGlobe();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [globeOpen, onToggleGlobe]);
-
-  // 地球仪的画布边长：随视口变化，封顶 640
-  useEffect(() => {
-    const measureSize = () => {
-      setGlobeSize(Math.min(window.innerHeight * 0.78, window.innerWidth * 0.94, 640));
-    };
-    measureSize();
-    window.addEventListener('resize', measureSize);
-    return () => window.removeEventListener('resize', measureSize);
-  }, []);
-
-  // 量出桌面上的落座位置，把地球仪从"屏幕正中"平移到书桌上
-  useEffect(() => {
-    const measure = () => {
-      const el = slotRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      setDock({
-        x: r.left + r.width / 2 - window.innerWidth / 2,
-        y: r.top + r.height / 2 - window.innerHeight / 2,
-        scale: r.width / globeSize,
-      });
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    const t = window.setTimeout(measure, 120);
-    return () => {
-      window.removeEventListener('resize', measure);
-      window.clearTimeout(t);
-    };
-  }, [globeSize]);
-
-  const globeStyle = {
-    '--globe-size': `${globeSize}px`,
-    '--gx': globeOpen ? '0px' : `${dock.x}px`,
-    '--gy': globeOpen ? '0px' : `${dock.y}px`,
-    '--gs': globeOpen ? 1 : dock.scale,
-  } as CSSProperties;
 
   return (
     <>
@@ -313,6 +264,13 @@ export default function MainLawn({
           >
             感官工作台
           </button>
+          <button
+            type="button"
+            className="hud__action hud__action--studio"
+            onClick={onOpenDesk}
+          >
+            绘本课桌
+          </button>
         </div>
       </header>
 
@@ -336,51 +294,18 @@ export default function MainLawn({
       </button>
     </div>
 
-    {/* 地球仪挂到 body 上：与它的遮罩处在同一个层叠上下文里，
-        否则 .scene 的裁剪/合成层会让整颗球跟着背景一起被高斯模糊掉 */}
-    {createPortal(
-      <>
-        {/* 地球仪放大时的背景：整屏高斯模糊，只剩球体清晰 */}
-        {globeOpen && (
-          <div className="veil veil--globe" onClick={onToggleGlobe} aria-hidden="true" />
-        )}
-
-        <div className="globe-layer" data-zoomed={globeOpen} style={globeStyle}>
-          <ClayGlobe
-            pins={pins}
-            size={globeSize}
-            zoomed={globeOpen}
-            activeTargetCoord={activeTargetCoord}
-            newlyDroppedPinId={newlyDroppedPinId}
-            onSelectPin={onSelectPin}
-            onToggleZoom={onToggleGlobe}
-            onHoverPin={(pin, x, y) => setHover(pin ? { pin, x, y } : null)}
-            onPinAnchor={onPinAnchor}
-          />
-        </div>
-
-        {/* 图钉悬停气泡：童眼看 [地区名称] */}
-        {hover && (
-          <div className="pin-tip" style={{ left: hover.x, top: hover.y - 14 }} role="status">
-            童眼看 {hover.pin.city.split('·').pop()}
-          </div>
-        )}
-      </>,
-      document.body
-    )}
-
-    {globeChrome && (
-      <button
-        type="button"
-        className="veil__close globe-close"
-        onClick={onToggleGlobe}
-        aria-label="回到课桌"
-      >
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-          <path d="M3 3l12 12M15 3L3 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      </button>
-    )}
+    {/* 地球仪浮层：与「绘本课桌」共用同一颗球 */}
+    <GlobeStage
+      slotRef={slotRef}
+      pins={pins}
+      zoomed={globeOpen}
+      chrome={globeChrome}
+      activeTargetCoord={activeTargetCoord}
+      newlyDroppedPinId={newlyDroppedPinId}
+      onSelectPin={onSelectPin}
+      onToggleZoom={onToggleGlobe}
+      onPinAnchor={onPinAnchor}
+    />
     </>
   );
 }

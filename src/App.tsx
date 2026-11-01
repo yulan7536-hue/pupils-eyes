@@ -7,6 +7,7 @@ import WorkSheet from './components/WorkSheet';
 import RegionDialog from './components/RegionDialog';
 import RoleDialog from './components/RoleDialog';
 import XingzhiStudio from './components/XingzhiStudio';
+import ToonDesk from './components/ToonDesk';
 import PinBurst from './components/PinBurst';
 import { loadSavedPins, loadSavedWorks, savePins, saveWorks } from './data/initialWorks';
 import type { LocationChoice, PinItem, SubmissionPayload, WorkItem } from './types';
@@ -17,11 +18,15 @@ import { analyzeLesson, analyzeLessonSync } from './utils/aiLesson';
 type Step = 'INTRO' | 'CHASE' | 'LAWN';
 
 export default function App() {
-  // #lawn 可直接落到主场景；#note / #album 直接翻开对应书本，#studio 直接进工作台
+  // #lawn / #desk 可直接落到主场景；#note / #album 直接翻开对应书本，#studio 直接进工作台
   const [step, setStep] = useState<Step>(() =>
-    typeof window !== 'undefined' && ['#lawn', '#note', '#album', '#studio'].includes(window.location.hash)
+    typeof window !== 'undefined' && ['#lawn', '#desk', '#note', '#album', '#studio'].includes(window.location.hash)
       ? 'LAWN'
       : 'INTRO'
+  );
+  /** 主场景两套入口：true = 绘本课桌（纯 CSS），false = 3D 草坪 */
+  const [desk, setDesk] = useState<boolean>(
+    () => typeof window !== 'undefined' && window.location.hash === '#desk'
   );
   const [chaseAlive, setChaseAlive] = useState(false);
   const [pins, setPins] = useState<PinItem[]>(() => loadSavedPins());
@@ -235,32 +240,69 @@ export default function App() {
       )}
 
       {/* 阶段 3 / 4：主场景。在追光阶段就预先挂上，让白光散开时场景已就绪 */}
-      {step !== 'INTRO' && (
-        <MainLawn
-          pins={pins}
-          works={works}
-          globeOpen={globeOpen}
-          globeChrome={globeOpen && !roleOpen && !regionOpen}
-          onToggleGlobe={() => {
-            storySound.playPaperTurn();
-            setGlobeOpen((v) => !v);
-          }}
-          activeTargetCoord={target}
-          newlyDroppedPinId={newPinId}
-          onPinAnchor={setBurstAt}
-          onOpenBook={(b) => {
-            storySound.playPaperTurn();
-            setBook(b);
-          }}
-          onOpenUpload={openUpload}
-          onOpenStudio={() => {
-            storySound.playPaperTurn();
-            setStudio(true);
-          }}
-          onSelectPin={openPin}
-          onReplay={replay}
-        />
-      )}
+      {step !== 'INTRO' &&
+        (desk ? (
+          <ToonDesk
+            pins={pins}
+            works={works}
+            globeOpen={globeOpen}
+            globeChrome={globeOpen && !roleOpen && !regionOpen}
+            activeTargetCoord={target}
+            newlyDroppedPinId={newPinId}
+            onToggleGlobe={() => {
+              storySound.playPaperTurn();
+              setGlobeOpen((v) => !v);
+            }}
+            onPinAnchor={setBurstAt}
+            onSelectPin={openPin}
+            onOpenUpload={openUpload}
+            onOpenNote={() => {
+              storySound.playPaperTurn();
+              setBook('note');
+            }}
+            onOpenAlbum={() => {
+              storySound.playPaperTurn();
+              setBook('album');
+            }}
+            onOpenStudio={() => {
+              storySound.playPaperTurn();
+              setStudio(true);
+            }}
+            onBackToLawn={() => {
+              storySound.playPaperTurn();
+              setDesk(false);
+            }}
+          />
+        ) : (
+          <MainLawn
+            pins={pins}
+            works={works}
+            globeOpen={globeOpen}
+            globeChrome={globeOpen && !roleOpen && !regionOpen}
+            onToggleGlobe={() => {
+              storySound.playPaperTurn();
+              setGlobeOpen((v) => !v);
+            }}
+            activeTargetCoord={target}
+            newlyDroppedPinId={newPinId}
+            onPinAnchor={setBurstAt}
+            onOpenBook={(b) => {
+              storySound.playPaperTurn();
+              setBook(b);
+            }}
+            onOpenUpload={openUpload}
+            onOpenStudio={() => {
+              storySound.playPaperTurn();
+              setStudio(true);
+            }}
+            onOpenDesk={() => {
+              storySound.playPaperTurn();
+              setDesk(true);
+            }}
+            onSelectPin={openPin}
+            onReplay={replay}
+          />
+        ))}
 
       {/* 行智开物 × 童眼工作台：感官打捞（行）+ 四维打磨（开物） */}
       {studio && (
