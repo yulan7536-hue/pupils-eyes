@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom';
 import Desk from './Desk';
 import ClayGlobe from './ClayGlobe';
+import Fireflies from './Fireflies';
 import { WISTERIA_STRANDS } from './wisteriaStrands';
 import type { PinItem, WorkItem } from '../types';
 
@@ -37,6 +38,8 @@ interface MainLawnProps {
   onOpenUpload: () => void;
   /** 打开「行智开物 × 童眼」工作台（感官打捞 + 四维打磨） */
   onOpenStudio: () => void;
+  /** 打开「拼贴花园」模式（2.5D 可旋转场景 + 贴纸） */
+  onOpenCollage: () => void;
   onSelectPin: (pin: PinItem) => void;
   onReplay: () => void;
   /** 新增：《古墓丽影》风格 3D 文物建筑检视回调 */
@@ -44,65 +47,6 @@ interface MainLawnProps {
 }
 
 const TUFTS = [46, 72, 38, 88, 56, 96, 44, 76, 50, 84, 40, 66, 34, 80, 48, 70, 42, 92, 54, 64];
-
-/** 空气里飘动的晨曦微光点 */
-const MOTES = [
-  { x: 12, y: 62, s: 0.7, d: 0 },
-  { x: 20, y: 45, s: 1, d: 1.6 },
-  { x: 30, y: 68, s: 0.6, d: 3.1 },
-  { x: 41, y: 40, s: 0.85, d: 0.8 },
-  { x: 55, y: 57, s: 0.65, d: 2.4 },
-  { x: 63, y: 33, s: 0.9, d: 4.2 },
-  { x: 72, y: 60, s: 0.7, d: 1.1 },
-  { x: 83, y: 44, s: 1, d: 3.6 },
-  { x: 92, y: 66, s: 0.6, d: 2 },
-  { x: 7, y: 38, s: 0.8, d: 5 },
-  { x: 47, y: 74, s: 0.55, d: 4.6 },
-  { x: 78, y: 76, s: 0.6, d: 0.4 },
-];
-
-/** 暖白 / 淡金 Bokeh 光斑 */
-const BOKEH = [
-  { x: 8, y: 18, s: 2.6, d: 0 },
-  { x: 24, y: 12, s: 3.4, d: 2.2 },
-  { x: 44, y: 16, s: 2.2, d: 4.6 },
-  { x: 64, y: 10, s: 3.8, d: 1.4 },
-  { x: 82, y: 15, s: 2.8, d: 5.2 },
-  { x: 95, y: 24, s: 3.2, d: 2.8 },
-];
-
-function Fireflies() {
-  return (
-    <div className="motes" aria-hidden="true">
-      {BOKEH.map((m, i) => (
-        <span
-          key={`bk${i}`}
-          className="mote mote--bokeh"
-          style={{
-            left: `${m.x}%`,
-            top: `${m.y}%`,
-            width: `calc(var(--u) * ${1.6 * m.s})`,
-            height: `calc(var(--u) * ${1.6 * m.s})`,
-            animationDelay: `${-m.d}s`,
-          }}
-        />
-      ))}
-      {MOTES.map((m, i) => (
-        <span
-          key={i}
-          className="mote"
-          style={{
-            left: `${m.x}%`,
-            top: `${m.y}%`,
-            width: `calc(var(--u) * ${0.7 * m.s})`,
-            height: `calc(var(--u) * ${0.7 * m.s})`,
-            animationDelay: `${-m.d}s`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
 
 function Tuft({ h }: { h: number }) {
   return (
@@ -128,6 +72,7 @@ export default function MainLawn({
   onOpenBook,
   onOpenUpload,
   onOpenStudio,
+  onOpenCollage,
   onSelectPin,
   onReplay,
   onInspectArtifact,
@@ -326,6 +271,16 @@ export default function MainLawn({
             <span className="btn-cn">感官工作台</span>
             <span className="btn-en" lang="en">
               Sensory Atelier
+            </span>
+          </button>
+          <button
+            type="button"
+            className="hud__action hud__action--collage"
+            onClick={onOpenCollage}
+          >
+            <span className="btn-cn">拼贴花园</span>
+            <span className="btn-en" lang="en">
+              Collage Garden
             </span>
           </button>
         </div>

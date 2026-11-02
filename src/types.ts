@@ -81,6 +81,42 @@ export interface LocationChoice {
   locationString: string;
 }
 
+/* ---------------- 拼贴花园：贴纸与任务 ---------------- */
+
+/** 拼贴花园里的一张贴纸 */
+export interface Sticker {
+  id: string;
+  /** 贴纸图源：预置贴纸名，或上传后 AI 处理得到的 dataURL */
+  src: string;
+  /** 是否为预置贴纸（预置的存名字，上传的存图片数据） */
+  preset?: string;
+  /** 场景内位置（世界坐标，y 是高度、z 是纵深） */
+  x: number;
+  y: number;
+  z: number;
+  /** 缩放倍数 */
+  scale: number;
+  /** 绕屏幕法线的旋转（弧度） */
+  rotation: number;
+  /** 水平镜像 */
+  flipX: boolean;
+  /** 层级，越大越靠前 */
+  layer: number;
+}
+
+/** 每日任务 */
+export interface Task {
+  id: string;
+  title: string;
+  desc: string;
+  /** 目标次数 */
+  goal: number;
+  /** 已完成次数 */
+  progress: number;
+  /** 是否已领取奖励 */
+  claimed: boolean;
+}
+
 /* ---------------- AI 教案解析：六维智能雷达图 ---------------- */
 
 /** 六维雷达图的 6 个固定维度（顺序即雷达图的顶点顺序，不可变） */

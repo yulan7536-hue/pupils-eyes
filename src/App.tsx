@@ -9,11 +9,13 @@ import WorkSheet from './components/WorkSheet';
 import RegionDialog from './components/RegionDialog';
 import RoleDialog from './components/RoleDialog';
 import XingzhiStudio from './components/XingzhiStudio';
+import CollageScene from './components/CollageScene';
 import PinBurst from './components/PinBurst';
 import { loadSavedPins, loadSavedWorks, savePins, saveWorks } from './data/initialWorks';
 import type { LocationChoice, PinItem, SubmissionPayload, WorkItem } from './types';
 import { storySound } from './utils/sound';
 import { analyzeLesson, analyzeLessonSync } from './utils/aiLesson';
+import { bumpTask } from './utils/stickerStore';
 import { buildArtifact, buildLightRig } from './three/artifactModels';
 import type { ArtifactKey } from './three/artifactModels';
 
@@ -58,7 +60,7 @@ const artifactDatabase: Record<string, {
 export default function App() {
   // 原有状态：全量保留
   const [step, setStep] = useState<Step>(() =>
-    typeof window !== 'undefined' && ['#lawn', '#note', '#album', '#studio'].includes(window.location.hash)
+    typeof window !== 'undefined' && ['#lawn', '#note', '#album', '#studio', '#collage'].includes(window.location.hash)
       ? 'LAWN'
       : 'INTRO'
   );
@@ -104,6 +106,11 @@ export default function App() {
 
   const [studio, setStudio] = useState<boolean>(
     () => typeof window !== 'undefined' && window.location.hash === '#studio'
+  );
+
+  // 拼贴花园模式
+  const [collageOpen, setCollageOpen] = useState<boolean>(
+    () => typeof window !== 'undefined' && window.location.hash === '#collage'
   );
 
   const [regionOpen, setRegionOpen] = useState(false);
@@ -372,12 +379,17 @@ export default function App() {
           onPinAnchor={setBurstAt}
           onOpenBook={(b) => {
             storySound.playPaperTurn();
+            bumpTask('read');
             setBook(b);
           }}
           onOpenUpload={openUpload}
           onOpenStudio={() => {
             storySound.playPaperTurn();
             setStudio(true);
+          }}
+          onOpenCollage={() => {
+            storySound.playPaperTurn();
+            setCollageOpen(true);
           }}
           onSelectPin={openPin}
           onReplay={replay}
@@ -398,6 +410,16 @@ export default function App() {
                 ? '四维打磨记录与童眼作品已同步至行智开物主平台【学生个人数字资产包】'
                 : `已同步 ${filled} 维记录，补齐四维才会生成完整作品档案`
             );
+          }}
+        />
+      )}
+
+      {/* 拼贴花园模式 */}
+      {collageOpen && (
+        <CollageScene
+          onClose={() => {
+            storySound.playPaperTurn();
+            setCollageOpen(false);
           }}
         />
       )}
@@ -430,6 +452,7 @@ export default function App() {
                 w.id === id ? { ...w, likes: w.likes + 1, lit: true } : w
               )
             );
+            bumpTask('like');
             say('球面上的小灯亮了 · 这份成果被点亮');
           }}
           onComment={(id, text) =>
