@@ -5,9 +5,14 @@ import ClayGlobe from './ClayGlobe';
 import { WISTERIA_STRANDS } from './wisteriaStrands';
 import type { PinItem, WorkItem } from '../types';
 
-/** 背景四层资源的地址。必须走 BASE_URL —— 项目站点部署在 /pupils-eyes/ 子路径下，
- *  写在 JS 字符串里的根路径 Vite 不会改写，会全部 404。 */
-const ASSET = import.meta.env.BASE_URL;
+/**
+ * 背景四层资源的地址。
+ *
+ * 这里必须拿到绝对地址，光拼 BASE_URL 不够：构建用相对 base（'./'）时，
+ * `--wis: url('./scene/…')` 这种写在 style 里的自定义属性，浏览器会拿**样式表的地址**
+ * 去解析，于是变成 /assets/scene/wisteria.webp，404。先跟文档地址合一次就没事了。
+ */
+const ASSET = new URL(import.meta.env.BASE_URL, document.baseURI).href;
 const SCENE_LAYERS = {
   base: `${ASSET}scene/base.webp`,
   wisteria: `${ASSET}scene/wisteria.webp`,

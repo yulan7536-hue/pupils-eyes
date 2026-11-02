@@ -9,9 +9,9 @@ interface OpeningVideoProps {
  * 阶段 1：开场影片。文件位于 public/media/opening.mp4（10 秒 / 1280×720 / H.264）。
  * .gitignore 里对 *.mp4 做了全局忽略，这个文件是靠例外规则才被纳入仓库的。
  */
-// 用 BASE_URL 拼接：GitHub Pages 部署在 /<repo>/ 子路径下，
-// 直接写 '/media/opening.mp4' 会指向站点根，导致 404。
-const VIDEO_SRC = `${import.meta.env.BASE_URL}media/opening.mp4`;
+// 用 BASE_URL 拼：站点可能挂在子路径下，直接写 '/media/opening.mp4' 会指向站点根。
+// 构建用相对 base（'./'）时要跟文档地址合一次，否则这个相对地址没有参照物。
+const VIDEO_SRC = `${new URL(import.meta.env.BASE_URL, document.baseURI).href}media/opening.mp4`;
 
 /** 读不到时长时的兜底秒数 */
 const FALLBACK_DURATION = 10;
