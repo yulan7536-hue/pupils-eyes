@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Role, WorkItem } from '../types';
-import { CLOUD_ORIGIN, cloudReachable, themeKeyOf } from '../utils/cloudConfig';
+import { cloudReachable, themeKeyOf } from '../utils/cloudConfig';
 import type { ThemePhoto } from '../utils/cloudConfig';
 import { storySound } from '../utils/sound';
 
@@ -96,10 +96,7 @@ export default function PhotoWall({ work, compact = false }: PhotoWallProps) {
 
       {!reachable ? (
         <p className="photowall__offline">
-          照片存在云端，要连上才拉得下来。
-          <a href={`${CLOUD_ORIGIN}/#note`} target="_blank" rel="noreferrer noopener">
-            到 {CLOUD_ORIGIN.replace(/^https?:\/\//, '')} 打开
-          </a>
+          照片存在云端，要连上才拉得下来。请用云端版的分享链接打开这一页，就能看照片、也能上传。
         </p>
       ) : error ? (
         <div className="photowall__note">
