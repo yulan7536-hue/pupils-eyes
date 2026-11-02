@@ -42,7 +42,8 @@ export interface StylizeResult {
   failReason?: string;
 }
 
-function getDoubaoKey(): string {
+/** 读取豆包 Key：页面内 localStorage 优先，其次构建期环境变量 */
+export function getDoubaoKey(): string {
   if (typeof window !== 'undefined') {
     try {
       const local = window.localStorage.getItem(DOUBAO_KEY_LOCAL);

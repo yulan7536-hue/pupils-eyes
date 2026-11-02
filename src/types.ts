@@ -86,17 +86,21 @@ export interface LocationChoice {
 /** 拼贴花园里的一张贴纸 */
 export interface Sticker {
   id: string;
-  /** 贴纸图源：预置贴纸名，或上传后 AI 处理得到的 dataURL */
+  /** 贴纸图源：预置贴纸名，或上传后 AI 处理得到的 dataURL；3D 摆件为空 */
   src: string;
   /** 是否为预置贴纸（预置的存名字，上传的存图片数据） */
   preset?: string;
+  /** '2d'（默认）平面贴纸 / '3d' 图生 3D 摆件 */
+  kind?: '2d' | '3d';
+  /** kind === '3d' 时，IndexedDB 里 glb 模型的 id */
+  modelId?: string;
   /** 场景内位置（世界坐标，y 是高度、z 是纵深） */
   x: number;
   y: number;
   z: number;
   /** 缩放倍数 */
   scale: number;
-  /** 绕屏幕法线的旋转（弧度） */
+  /** 绕屏幕法线的旋转（弧度）；3D 摆件为绕 Y 轴旋转 */
   rotation: number;
   /** 水平镜像 */
   flipX: boolean;

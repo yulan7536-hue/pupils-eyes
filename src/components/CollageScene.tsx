@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { makePresetSticker, presetLabel } from '../utils/stickerAssets';
 import {
   loadStickers,
@@ -15,8 +16,11 @@ import {
   type MySticker,
 } from '../utils/stickerStore';
 import { stylizeImage } from '../utils/stickerAI';
+import { generate3D, waitModel3D, loadPendingTask, clearPendingTask } from '../utils/model3d';
+import { saveModel, listModels, removeModel, getModel, type Model3DItem } from '../utils/modelStore';
 import StickerDock from './StickerDock';
 import StickerPreview from './StickerPreview';
+import ModelPreview from './ModelPreview';
 import AIProcessModal from './AIProcessModal';
 import TaskCenter from './TaskCenter';
 import Fireflies from './Fireflies';
@@ -46,8 +50,54 @@ const VIEW_H = 10;
 const MIN_ZOOM = 0.8;
 /** 最大缩放倍数 */
 const MAX_ZOOM = 2.4;
+/**
+ * 3D 摆件脚下的接地阴影。
+ * 用「正对相机的平面」而不是水平面/精灵：正交相机是正面视角，
+ * 水平面会被压成一条线，Sprite 在当前透明排序下也不可靠。
+ */
+function makeGroundShadow(): THREE.Mesh {
+  const size = 128;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(62, 48, 38, 0.5)');
+  g.addColorStop(0.45, 'rgba(62, 48, 38, 0.22)');
+  g.addColorStop(1, 'rgba(62, 48, 38, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+    })
+  );
+  // 压扁成椭圆、比模型略宽，才能在脚下露出来
+  mesh.scale.set(3.6, 1.2, 1);
+  mesh.position.set(0, 0.1, 0);
+  mesh.renderOrder = 2;
+  return mesh;
+}
+
 /** 贴纸 Sprite 的基础尺寸（世界单位） */
 const STICKER_BASE = 1.9;
+
+/** 把 3D 生成的接口错误翻译成一句人话 */
+function describe3DFailure(msg: string): string {
+  if (msg.includes('AccountOverdue')) return 'AI 账户欠费，3D 生成暂不可用';
+  if (msg.includes('401') || msg.includes('Unauthorized')) return 'AI Key 无效，3D 生成暂不可用';
+  if (msg.includes('Failed to fetch')) return '网络不通，3D 生成失败，稍后再试';
+  if (msg.includes('超时')) return '3D 生成超时了，可以再试一次';
+  if (msg.includes('InvalidParameter')) return '这张图不符合要求（需 jpg/png，小于 4096px）';
+  return `3D 生成失败：${msg.slice(0, 50)}`;
+}
 
 export default function CollageScene({ onClose }: CollageSceneProps) {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -63,8 +113,12 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
   const [taskDot, setTaskDot] = useState<boolean>(() => hasUnclaimedReward());
   /** 「我的贴纸」素材库 */
   const [library, setLibrary] = useState<MySticker[]>(() => loadLibrary());
+  /** 已生成的 3D 摆件（IndexedDB 元信息） */
+  const [models, setModels] = useState<Model3DItem[]>([]);
   /** AI 抠图结果，非空时显示预览确认框 */
   const [preview, setPreview] = useState<string | null>(null);
+  /** 刚生成好待确认的 3D 模型（确认后才入背包并落地） */
+  const [preview3d, setPreview3d] = useState<Model3DItem | null>(null);
   /** 轻提示（AI 降级原因等） */
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
@@ -80,6 +134,11 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
   const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const stickerRootRef = useRef<THREE.Group | null>(null);
+  /** 3D 摆件挂载点 */
+  const modelRootRef = useRef<THREE.Group | null>(null);
+  /** stickerId → 场景里的 3D Group */
+  const modelMapRef = useRef<Map<string, THREE.Group>>(new Map());
+  const [sceneReady, setSceneReady] = useState(false);
   const bgRef = useRef<THREE.Mesh | null>(null);
   const spriteMapRef = useRef<Map<string, THREE.Sprite>>(new Map());
   const textureCacheRef = useRef<Map<string, THREE.Texture>>(new Map());
@@ -110,6 +169,8 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
     spriteMapRef.current.clear();
 
     stickersRef.current.forEach((stk) => {
+      // 3D 摆件由 modelRoot 单独管理，这里只处理平面贴纸
+      if (stk.kind === '3d') return;
       const tex = getTexture(stk.src);
       const mat = new THREE.SpriteMaterial({
         map: tex,
@@ -136,6 +197,89 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
       spriteMapRef.current.set(stk.id, sprite);
     });
   }, [getTexture]);
+
+  // —— 3D 摆件同步：加载新增的、移除删除的、同步位置/旋转/缩放 ——
+  useEffect(() => {
+    const root = modelRootRef.current;
+    if (!root || !sceneReady) return;
+
+    const want = stickers.filter((s) => s.kind === '3d' && s.modelId);
+    const wantIds = new Set(want.map((s) => s.id));
+
+    // 清掉已经不在列表里的
+    for (const [sid, group] of [...modelMapRef.current]) {
+      if (wantIds.has(sid)) continue;
+      root.remove(group);
+      group.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        mesh.geometry?.dispose();
+        const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+        else mat?.dispose();
+      });
+      modelMapRef.current.delete(sid);
+    }
+
+    want.forEach((stk) => {
+      const existing = modelMapRef.current.get(stk.id);
+      if (existing) {
+        existing.position.set(stk.x, stk.y, stk.z);
+        existing.rotation.y = stk.rotation;
+        existing.scale.setScalar(stk.scale);
+        return;
+      }
+      // 首次出现：从 IndexedDB 取 glb 并挂到场景
+      void (async () => {
+        const item = await getModel(stk.modelId!);
+        if (!item) return;
+        const url = URL.createObjectURL(item.glb);
+        new GLTFLoader().load(
+          url,
+          (gltf) => {
+            URL.revokeObjectURL(url);
+            const obj = gltf.scene;
+            // 先给展示倾角（正交相机正对画面，不给角度只能看到一个面），
+            // 再按「旋转之后」的包围盒归一化落地 —— 顺序反了底面会歪、阴影会被压在模型里。
+            obj.rotation.y = -0.34;
+            obj.rotation.x = 0.1;
+            obj.updateMatrixWorld(true);
+
+            const box = new THREE.Box3().setFromObject(obj);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z) || 1;
+            obj.scale.setScalar(2.5 / maxDim);
+            obj.updateMatrixWorld(true);
+
+            const box2 = new THREE.Box3().setFromObject(obj);
+            const center = new THREE.Vector3();
+            box2.getCenter(center);
+            obj.position.x -= center.x;
+            obj.position.z -= center.z;
+            obj.position.y -= box2.min.y; // 底面贴到 y=0
+
+            const group = new THREE.Group();
+            group.add(obj);
+            group.add(makeGroundShadow());
+            group.position.set(stk.x, stk.y, stk.z);
+            group.rotation.y = stk.rotation;
+            group.scale.setScalar(stk.scale);
+            // 让 pick 能沿父链找回 stickerId
+            group.traverse((o) => {
+              o.userData.stickerId = stk.id;
+            });
+            root.add(group);
+            modelMapRef.current.set(stk.id, group);
+          },
+          undefined,
+          (err) => {
+            URL.revokeObjectURL(url);
+            console.warn('[collage] 3D 模型加载失败', err);
+          }
+        );
+      })();
+    });
+  }, [stickers, sceneReady]);
 
   // —— 场景初始化 ——
   useEffect(() => {
@@ -182,11 +326,26 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
     const stickerRoot = new THREE.Group();
     scene.add(stickerRoot);
 
+    // 3D 摆件是 PBR 材质，必须有光；背景（MeshBasic）和贴纸（SpriteMaterial）不受光影响。
+    // 强度按 three 的物理光照单位给：太高会把 PBR 材质冲成死白，看不出明暗。
+    scene.add(new THREE.AmbientLight(0xfff9ef, 0.85));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.9);
+    keyLight.position.set(4, 7, 9);
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xffe8cf, 0.7);
+    fillLight.position.set(-6, 3, 5);
+    scene.add(fillLight);
+
+    const modelRoot = new THREE.Group();
+    scene.add(modelRoot);
+
     sceneRef.current = scene;
     cameraRef.current = camera;
     rendererRef.current = renderer;
     stickerRootRef.current = stickerRoot;
+    modelRootRef.current = modelRoot;
     bgRef.current = bg;
+    setSceneReady(true);
 
     /** 按窗口尺寸调整正交相机视野 + 背景 cover 尺寸 */
     const layout = () => {
@@ -227,11 +386,31 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
       pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
+
+      // 先查平面贴纸：多个重叠时按 renderOrder 取最上层
       const sprites = [...spriteMapRef.current.values()];
-      const hits = raycaster.intersectObjects(sprites, false);
-      if (!hits.length) return null;
-      hits.sort((a, b) => b.object.renderOrder - a.object.renderOrder);
-      return hits[0].object.userData.stickerId as string;
+      if (sprites.length) {
+        const hits = raycaster.intersectObjects(sprites, false);
+        if (hits.length) {
+          hits.sort((a, b) => b.object.renderOrder - a.object.renderOrder);
+          return hits[0].object.userData.stickerId as string;
+        }
+      }
+
+      // 再查 3D 摆件：命中的是子 mesh，要沿父链找回带 stickerId 的组
+      const models = [...modelMapRef.current.values()];
+      if (models.length) {
+        const hits = raycaster.intersectObjects(models, true);
+        if (hits.length) {
+          let o: THREE.Object3D | null = hits[0].object;
+          while (o) {
+            const id = o.userData.stickerId as string | undefined;
+            if (id) return id;
+            o = o.parent;
+          }
+        }
+      }
+      return null;
     };
 
     const onPointerDown = (e: PointerEvent) => {
@@ -259,6 +438,12 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
         if (sprite) {
           sprite.position.x = hit.x;
           sprite.position.y = hit.y;
+          return;
+        }
+        const model = modelMapRef.current.get(drag.id);
+        if (model) {
+          model.position.x = hit.x;
+          model.position.y = hit.y;
         }
       }
     };
@@ -268,9 +453,10 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
       if (!drag) return;
       dragRef.current = null;
       const sprite = spriteMapRef.current.get(drag.id);
-      if (sprite) {
-        const { x, y } = sprite.position;
-        setStickers((prev) => prev.map((s) => (s.id === drag.id ? { ...s, x, y } : s)));
+      const model = modelMapRef.current.get(drag.id);
+      const pos = sprite?.position ?? model?.position;
+      if (pos) {
+        setStickers((prev) => prev.map((s) => (s.id === drag.id ? { ...s, x: pos.x, y: pos.y } : s)));
       }
       try {
         (renderer.domElement as HTMLCanvasElement).releasePointerCapture(e.pointerId);
@@ -327,13 +513,14 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (preview) setPreview(null);
+        if (preview3d) setPreview3d(null);
+        else if (preview) setPreview(null);
         else if (dockOpen) setDockOpen(false);
         else if (taskOpen) setTaskOpen(false);
         else if (!aiProgress) onClose();
         return;
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId && !aiProgress && !preview) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId && !aiProgress && !preview && !preview3d) {
         const target = e.target as HTMLElement | null;
         // 输入框里按退格不删贴纸
         if (target && /^(INPUT|TEXTAREA)$/.test(target.tagName)) return;
@@ -344,13 +531,33 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, dockOpen, taskOpen, aiProgress, selectedId, preview]);
+  }, [onClose, dockOpen, taskOpen, aiProgress, selectedId, preview, preview3d]);
 
   // —— 进入花园自动打卡 + 刷新任务红点 ——
   useEffect(() => {
     bumpTask('checkin');
     setTaskDot(hasUnclaimedReward());
   }, []);
+
+  // —— 进场：读已存的 3D 模型 + 恢复上次没跑完的生成任务 ——
+  useEffect(() => {
+    void listModels().then(setModels);
+
+    const pending = loadPendingTask();
+    if (!pending) return;
+    setAiProgress({ pct: 5, stage: '继续等待上次的 3D 模型' });
+    waitModel3D(pending.id, (pct, stage) => setAiProgress({ pct, stage }))
+      .then(async (res) => {
+        const item = await saveModel(res.glb);
+        setModels((prev) => [item, ...prev]);
+        setPreview3d(item);
+      })
+      .catch((err) => {
+        console.warn('[collage] 恢复 3D 任务失败', err);
+        showToast('上次的 3D 生成没成功，可以再试一次');
+      })
+      .finally(() => setAiProgress(null));
+  }, [showToast]);
 
   // —— 贴纸操作 ——
   const updateSticker = (id: string, patch: Partial<Sticker>) =>
@@ -439,6 +646,65 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
     setDockOpen(true);
   };
 
+  /** 把一张 3D 摆件放进花园 */
+  const placeModel3D = (item: Model3DItem) => {
+    const maxLayer = stickersRef.current.reduce((m, s) => Math.max(m, s.layer), 0);
+    const stk: Sticker = {
+      id: `stk-${Date.now()}`,
+      src: '',
+      kind: '3d',
+      modelId: item.id,
+      ...newStickerPos(),
+      scale: 1,
+      rotation: 0,
+      flipX: false,
+      layer: maxLayer + 1,
+    };
+    setStickers((prev) => [...prev, stk]);
+    setSelectedId(stk.id);
+  };
+
+  /** 3D 生成：照片 → Seed3D → glb → 预览确认 */
+  const handleMake3D = async (file: File) => {
+    if (quota <= 0) return;
+    setDockOpen(false);
+    setAiProgress({ pct: 1, stage: '正在上传照片' });
+    try {
+      const res = await generate3D(file, (pct, stage) => setAiProgress({ pct, stage }));
+      const item = await saveModel(res.glb);
+      setModels((prev) => [item, ...prev]);
+
+      const nextQuota = quota - 1;
+      setQuotaState(nextQuota);
+      setQuota(nextQuota);
+      bumpTask('upload');
+      setTaskDot(hasUnclaimedReward());
+
+      setPreview3d(item);
+    } catch (err) {
+      console.warn('[collage] 3D 生成失败', err);
+      clearPendingTask();
+      showToast(describe3DFailure(String((err as Error)?.message ?? err)));
+    } finally {
+      setAiProgress(null);
+    }
+  };
+
+  /** 3D 预览确认：放进花园（模型已在 IndexedDB，直接落地） */
+  const confirmPreview3d = () => {
+    if (!preview3d) return;
+    placeModel3D(preview3d);
+    setPreview3d(null);
+    showToast('3D 摆件已放进花园');
+  };
+
+  /** 删除一张 3D 摆件（场景 + IndexedDB 一起清） */
+  const removeModel3D = async (id: string) => {
+    await removeModel(id);
+    setModels((prev) => prev.filter((m) => m.id !== id));
+    setStickers((prev) => prev.filter((s) => s.modelId !== id));
+  };
+
   const duplicateSticker = () => {
     if (!selectedId) return;
     const src = stickersRef.current.find((s) => s.id === selectedId);
@@ -525,13 +791,20 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
         <StickerDock
           quota={quota}
           library={library}
+          models={models}
           onAddPreset={addPreset}
           onAddMySticker={(stk) => {
             placeSticker(stk.src);
             setDockOpen(false);
           }}
           onRemoveMySticker={(id) => setLibrary(removeFromLibrary(id))}
+          onAddModel={(item) => {
+            placeModel3D(item);
+            setDockOpen(false);
+          }}
+          onRemoveModel={removeModel3D}
           onUpload={handleUpload}
+          onUpload3D={handleMake3D}
           onClose={() => setDockOpen(false)}
         />
       )}
@@ -543,6 +816,19 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
           onConfirm={confirmPreview}
           onRetry={retryPreview}
           onDiscard={() => setPreview(null)}
+        />
+      )}
+
+      {/* 3D 摆件预览确认 */}
+      {preview3d && (
+        <ModelPreview
+          item={preview3d}
+          onConfirm={confirmPreview3d}
+          onRetry={() => {
+            setPreview3d(null);
+            setDockOpen(true);
+          }}
+          onDiscard={() => setPreview3d(null)}
         />
       )}
 
@@ -570,7 +856,11 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
       {selected && (
         <div className="collage-toolbar" ref={toolbarRef}>
           <span className="collage-toolbar__name">
-            {selected.preset ? presetLabel(selected.preset) : '我的贴纸'}
+            {selected.kind === '3d'
+              ? '3D 摆件'
+              : selected.preset
+                ? presetLabel(selected.preset)
+                : '我的贴纸'}
           </span>
           <button type="button" onClick={() => updateSticker(selected.id, { scale: Math.max(0.3, selected.scale * 0.85) })}>
             缩小
@@ -579,20 +869,25 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
             放大
           </button>
           <button type="button" onClick={() => updateSticker(selected.id, { rotation: selected.rotation + Math.PI / 8 })}>
-            旋转
+            {selected.kind === '3d' ? '转向' : '旋转'}
           </button>
-          <button type="button" onClick={() => updateSticker(selected.id, { flipX: !selected.flipX })}>
-            镜像
-          </button>
-          <button type="button" onClick={duplicateSticker}>
-            复制
-          </button>
-          <button type="button" onClick={() => bringLayer(1)}>
-            置顶
-          </button>
-          <button type="button" onClick={() => bringLayer(-1)}>
-            置底
-          </button>
+          {/* 镜像 / 复制 / 层级只对平面贴纸有意义 */}
+          {selected.kind !== '3d' && (
+            <>
+              <button type="button" onClick={() => updateSticker(selected.id, { flipX: !selected.flipX })}>
+                镜像
+              </button>
+              <button type="button" onClick={duplicateSticker}>
+                复制
+              </button>
+              <button type="button" onClick={() => bringLayer(1)}>
+                置顶
+              </button>
+              <button type="button" onClick={() => bringLayer(-1)}>
+                置底
+              </button>
+            </>
+          )}
           <button type="button" className="collage-toolbar__danger" onClick={removeSticker}>
             删除
           </button>

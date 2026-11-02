@@ -6635,11 +6635,47 @@ textarea.input {
 
 .sticker-dock__upload {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: calc(var(--u) * 1.4);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--u) * 0.9);
   padding-top: calc(var(--u) * 1.4);
   border-top: 1px dashed var(--retro-ink-muted);
+}
+
+.sticker-dock__upload-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 1.1);
+}
+
+.sticker-dock__upload-btn--3d {
+  background: #e8f0fb;
+}
+
+.sticker-dock__upload-btn--3d:hover {
+  background: #d7e5f8;
+}
+
+.sticker-dock__tip {
+  font-family: var(--font-cn-script);
+  font-size: clamp(10px, calc(var(--u) * 1.15), 13px);
+  letter-spacing: 0.04em;
+  color: var(--retro-ink-muted);
+}
+
+/* 3D 摆件图标：等距立方体剪影 */
+.sticker-dock__model {
+  min-width: calc(var(--u) * 6.6);
+}
+
+.sticker-dock__cube {
+  width: calc(var(--u) * 3.4);
+  height: calc(var(--u) * 3.4);
+  margin: calc(var(--u) * 0.9) 0;
+  background: linear-gradient(135deg, #d6e4f7 0%, #a6c3e6 100%);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5);
 }
 
 .sticker-dock__upload-btn {
@@ -6763,6 +6799,24 @@ textarea.input {
   max-height: calc(var(--u) * 26);
   object-fit: contain;
   filter: drop-shadow(0 calc(var(--u) * 0.6) calc(var(--u) * 0.9) rgba(74, 58, 46, 0.3));
+}
+
+/* 3D 预览：让画布填满，柔光底衬出模型 */
+.sticker-preview__stage--3d {
+  display: block;
+  height: calc(var(--u) * 26);
+  padding: 0;
+  overflow: hidden;
+  border-style: solid;
+  border-color: rgba(140, 109, 98, 0.28);
+  background-color: #f7f1e4;
+  background-image: radial-gradient(circle at 50% 38%, #ffffff 0%, #efe6d4 72%, #e7dcc6 100%);
+}
+
+.sticker-preview__stage--3d canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .sticker-preview__actions {
