@@ -1,19 +1,22 @@
 import * as THREE from 'three';
 
 /**
- * 纯代码生成的黏土贴图。
- * 1) 地球底色：把简化大陆画进等距圆柱投影，再压上揉泥与纸浆颗粒；大陆边缘留一圈"捏出来"的浅边。
- * 2) 法线：低频噪声起伏，模拟手指按压的软陶表面。
- * 色调全部落在莫兰迪区间（灰绿海、灰苔陆地、浅土黄高地）。
+ * 纯代码生成的水彩贴图。
+ * 1) 地球底色：把简化大陆画进等距圆柱投影，再压上水彩晕染、干笔触与纸张颗粒；大陆边缘留一圈"颜料回渗"的水迹。
+ * 2) 法线：低频噪声起伏，模拟纸面的细微纹理。
+ * 色调全部落在水彩绘本区间（青蓝海、暖赭/芥末陆地、焦赭高地）。
  */
 
-const OCEAN = '#6ec4e8';
-const OCEAN_DEEP = '#4fa8d5';
-const LAND = '#9be17b';
-const LAND_DEEP = '#77c95b';
-const LAND_LIT = '#b6ef94';
-const OCHRE = '#e2c98a';
-const ICE = '#f7faf2';
+/* 水彩绘本色板：青蓝海 + 暖赭/芥末大陆，暖纸白留白，少量 dusty rose / deep navy 点缀 */
+const OCEAN = '#8ecfe8';
+const OCEAN_DEEP = '#5fb3d6';
+const LAND = '#e6c07a';
+const LAND_DEEP = '#d19a5c';
+const LAND_LIT = '#f2d59a';
+const OCHRE = '#e8b98a';
+const ROSE = '#d9a3a0';
+const NAVY = '#5b7c8c';
+const ICE = '#fbf7ea';
 
 /** 经纬度 → 等距圆柱像素 */
 const px = (lon: number, w: number) => ((lon + 180) / 360) * w;
@@ -117,23 +120,45 @@ export function createClayEarthTexture(width = 2048, height = 1024): THREE.Canva
   const ctx = canvas.getContext('2d');
 
   if (ctx) {
-    // 海：两块蓝揉在一起
+    // 海：青蓝底色上叠一块块水彩「晕染斑」（bloom），颜料在水里化开，边缘不是硬圆
     ctx.fillStyle = OCEAN;
     ctx.fillRect(0, 0, width, height);
-    ctx.fillStyle = OCEAN_DEEP;
-    for (let i = 0; i < 22; i++) {
+
+    for (let i = 0; i < 26; i++) {
+      const cx = Math.random() * width;
+      const cy = Math.random() * height;
+      const r = 90 + Math.random() * 240;
+      // 深青蓝水洗，向四周褪到透明
+      const g = ctx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r);
+      g.addColorStop(0, 'rgba(95, 179, 214, 0.72)');
+      g.addColorStop(0.5, 'rgba(95, 179, 214, 0.34)');
+      g.addColorStop(1, 'rgba(95, 179, 214, 0)');
+      ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.ellipse(
-        Math.random() * width,
-        Math.random() * height,
-        90 + Math.random() * 260,
-        60 + Math.random() * 170,
-        Math.random() * Math.PI,
-        0,
-        Math.PI * 2
-      );
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    // 少量 deep navy 深色水洗点缀，压出海的层次，又不抢大陆
+    for (let i = 0; i < 10; i++) {
+      const cx = Math.random() * width;
+      const cy = Math.random() * height;
+      const r = 60 + Math.random() * 150;
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0, 'rgba(91, 124, 140, 0.34)');
+      g.addColorStop(1, 'rgba(91, 124, 140, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 左上到右下的淡色水洗，制造「颜料褪到纸张」的留白感
+    const wash = ctx.createLinearGradient(0, 0, width * 0.7, height);
+    wash.addColorStop(0, 'rgba(251, 247, 234, 0.5)');
+    wash.addColorStop(0.5, 'rgba(251, 247, 234, 0)');
+    ctx.fillStyle = wash;
+    ctx.fillRect(0, 0, width, height);
 
     // 极冰：北极直接盖，南极用垂直渐变随球面渐隐，避免在球底形成硬边椭圆污渍
     ctx.fillStyle = ICE;
@@ -142,18 +167,18 @@ export function createClayEarthTexture(width = 2048, height = 1024): THREE.Canva
     const southTop = py(-64, height); // 渐变起点（较北、更靠近赤道）
     const southBottom = height; // 球底
     const southGrad = ctx.createLinearGradient(0, southTop, 0, southBottom);
-    southGrad.addColorStop(0, 'rgba(239, 242, 228, 0)');
-    southGrad.addColorStop(0.35, 'rgba(239, 242, 228, 0.55)');
-    southGrad.addColorStop(1, 'rgba(239, 242, 228, 0.95)');
+    southGrad.addColorStop(0, 'rgba(251, 247, 234, 0)');
+    southGrad.addColorStop(0.35, 'rgba(251, 247, 234, 0.55)');
+    southGrad.addColorStop(1, 'rgba(251, 247, 234, 0.95)');
     ctx.fillStyle = southGrad;
     ctx.fillRect(0, southTop, width, southBottom - southTop);
 
-    // 大陆：先描一圈浅色"捏边"，再压上本体的泥色
+    // 大陆：先描一圈淡色「水迹边」（颜料在边缘堆积回渗），再压上本体的暖色
     CONTINENTS.forEach(({ pts, color }) => {
       ctx.save();
       ctx.translate(5, 6);
       polyPath(ctx, pts, width, height);
-      ctx.fillStyle = 'rgba(58, 82, 52, 0.4)';
+      ctx.fillStyle = 'rgba(214, 166, 96, 0.3)';
       ctx.fill();
       ctx.restore();
 
@@ -161,12 +186,10 @@ export function createClayEarthTexture(width = 2048, height = 1024): THREE.Canva
       ctx.fillStyle = color;
       ctx.fill();
 
-      // 泥块内部的明暗：压一块受光的泥、再压一块背光的泥
+      // 泥块内部的明暗：改用水彩晕染（柔边径向渐变），不是硬边椭圆
       ctx.save();
       polyPath(ctx, pts, width, height);
       ctx.clip();
-      ctx.globalAlpha = 0.34;
-      ctx.fillStyle = LAND_LIT;
       const b = pts.reduce(
         (acc, [lon, lat]) => {
           acc.minLon = Math.min(acc.minLon, lon);
@@ -181,41 +204,65 @@ export function createClayEarthTexture(width = 2048, height = 1024): THREE.Canva
       const cy = py((b.minLat + b.maxLat) / 2, height);
       const rw = (px(b.maxLon, width) - px(b.minLon, width)) * 0.5;
       const rh = (py(b.minLat, height) - py(b.maxLat, height)) * 0.5;
+
+      // 受光面：浅芥末的柔光晕染
+      const lit = ctx.createRadialGradient(
+        cx - rw * 0.28, cy - rh * 0.34, rw * 0.05,
+        cx - rw * 0.28, cy - rh * 0.34, rw * 0.9
+      );
+      lit.addColorStop(0, 'rgba(242, 213, 154, 0.5)');
+      lit.addColorStop(1, 'rgba(242, 213, 154, 0)');
+      ctx.fillStyle = lit;
       ctx.beginPath();
-      ctx.ellipse(cx - rw * 0.28, cy - rh * 0.34, rw * 0.8, rh * 0.7, 0, 0, Math.PI * 2);
+      ctx.arc(cx - rw * 0.28, cy - rh * 0.34, rw * 0.9, 0, Math.PI * 2);
       ctx.fill();
-      ctx.globalAlpha = 0.26;
-      ctx.fillStyle = LAND_DEEP;
+
+      // 背光面：焦赭的柔光晕染
+      const shadow = ctx.createRadialGradient(
+        cx + rw * 0.34, cy + rh * 0.42, rw * 0.05,
+        cx + rw * 0.34, cy + rh * 0.42, rw * 0.95
+      );
+      shadow.addColorStop(0, 'rgba(209, 154, 92, 0.4)');
+      shadow.addColorStop(1, 'rgba(209, 154, 92, 0)');
+      ctx.fillStyle = shadow;
       ctx.beginPath();
-      ctx.ellipse(cx + rw * 0.34, cy + rh * 0.42, rw * 0.9, rh * 0.72, 0, 0, Math.PI * 2);
+      ctx.arc(cx + rw * 0.34, cy + rh * 0.42, rw * 0.95, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 一点 dusty rose 点缀，让大陆边缘透出暖意
+      const rose = ctx.createRadialGradient(
+        cx + rw * 0.1, cy + rh * 0.15, 0,
+        cx + rw * 0.1, cy + rh * 0.15, rw * 0.7
+      );
+      rose.addColorStop(0, 'rgba(217, 163, 160, 0.22)');
+      rose.addColorStop(1, 'rgba(217, 163, 160, 0)');
+      ctx.fillStyle = rose;
+      ctx.beginPath();
+      ctx.arc(cx + rw * 0.1, cy + rh * 0.15, rw * 0.7, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     });
 
-    // 揉泥条纹：极淡，只留一点被抹过的痕迹
-    for (let i = 0; i < 60; i++) {
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(232, 240, 226, 0.045)' : 'rgba(84, 104, 86, 0.045)';
+    // 干笔触：低透明度的短弧线，模拟画笔在纸面上快速扫过的痕迹
+    for (let i = 0; i < 46; i++) {
+      ctx.strokeStyle =
+        i % 2 === 0 ? 'rgba(235, 245, 246, 0.06)' : 'rgba(120, 156, 172, 0.06)';
+      ctx.lineWidth = 1 + Math.random() * 2;
       ctx.beginPath();
-      ctx.ellipse(
-        Math.random() * width,
-        Math.random() * height,
-        20 + Math.random() * 70,
-        8 + Math.random() * 22,
-        Math.random() * Math.PI,
-        0,
-        Math.PI * 2
-      );
-      ctx.fill();
+      const sx = Math.random() * width;
+      const sy = Math.random() * height;
+      ctx.arc(sx, sy, 18 + Math.random() * 66, Math.random() * Math.PI, Math.random() * Math.PI + 1.1);
+      ctx.stroke();
     }
 
-    // 纸浆颗粒
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
-    for (let i = 0; i < 2600; i++) {
-      ctx.fillRect(Math.random() * width, Math.random() * height, 2, 2);
+    // 纸面颗粒：水彩的 granulation，细小半透明噪点，比黏土的纯色方块更轻
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+    for (let i = 0; i < 2400; i++) {
+      ctx.fillRect(Math.random() * width, Math.random() * height, 1.6, 1.6);
     }
-    ctx.fillStyle = 'rgba(70, 84, 70, 0.1)';
-    for (let i = 0; i < 1800; i++) {
-      ctx.fillRect(Math.random() * width, Math.random() * height, 2.4, 2.4);
+    ctx.fillStyle = 'rgba(96, 122, 132, 0.09)';
+    for (let i = 0; i < 1700; i++) {
+      ctx.fillRect(Math.random() * width, Math.random() * height, 2, 2);
     }
   }
 

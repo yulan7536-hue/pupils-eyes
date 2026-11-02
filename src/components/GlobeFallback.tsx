@@ -41,7 +41,7 @@ export default function GlobeFallback({
       style={{ position: 'relative', width: size, height: size, cursor: zoomed ? 'zoom-out' : 'grab' }}
       onClick={onToggleZoom}
       role="img"
-      aria-label="黏土地球仪"
+      aria-label="水彩地球仪"
     >
       {/* 底座 */}
       <div
@@ -53,8 +53,8 @@ export default function GlobeFallback({
           height: '9%',
           transform: 'translateX(-50%)',
           borderRadius: '50%',
-          background: 'radial-gradient(ellipse at 38% 30%, #c8ae8a, #b1966f 60%, #9c7f5b)',  // taste-skill-ignore gradient: 黏土球体/光斑的明暗过渡只能靠渐变，这是 3D 捏制质感的物理依据
-          boxShadow: '0 8px 18px rgba(60,70,58,.28)',
+          background: 'radial-gradient(ellipse at 38% 30%, #e3b878, #d19a5c 60%, #b9814a)',  // taste-skill-ignore gradient: 水彩球体/光斑的明暗过渡只能靠渐变，这是立体体积的物理依据
+          boxShadow: '0 8px 18px rgba(120, 92, 60,.28)',
         }}
       />
 
@@ -70,9 +70,9 @@ export default function GlobeFallback({
           borderRadius: '50%',
           overflow: 'hidden',
           background:
-            'radial-gradient(circle at 33% 27%, #c6d3c2 0%, #a8b9ad 34%, #94a9a2 62%, #7f968f 84%, #718882 100%)',  // taste-skill-ignore gradient: 黏土球体/光斑的明暗过渡只能靠渐变，这是 3D 捏制质感的物理依据
+            'radial-gradient(circle at 33% 27%, #cfe7f0 0%, #a9d5e6 34%, #8ec9e0 62%, #6fb8d6 84%, #5faecf 100%)',  // taste-skill-ignore gradient: 水彩球体/光斑的明暗过渡只能靠渐变，这是立体体积的物理依据
           boxShadow:
-            'inset -14px -18px 30px rgba(58,72,64,.34), inset 10px 12px 24px rgba(255,255,255,.34), 0 16px 28px -12px rgba(58,72,64,.5)',
+            'inset -14px -18px 30px rgba(70, 110, 130,.32), inset 10px 12px 24px rgba(255,255,255,.4), 0 16px 28px -12px rgba(90, 110, 120,.5)',
         }}
       >
         {/* 陆块：靠水平位移假装在自转 */}
@@ -84,10 +84,10 @@ export default function GlobeFallback({
             transition: 'transform .1s linear',
           }}
         >
-          <div style={{ position: 'absolute', left: '8%', top: '18%', width: '46%', height: '34%', background: '#93a98b', borderRadius: '58% 42% 46% 54% / 54% 48% 52% 46%', opacity: 0.95 }} />
-          <div style={{ position: 'absolute', left: '58%', top: '26%', width: '38%', height: '44%', background: '#8fa787', borderRadius: '44% 56% 52% 48% / 46% 52% 48% 54%', opacity: 0.92 }} />
-          <div style={{ position: 'absolute', left: '30%', top: '58%', width: '34%', height: '26%', background: '#849c7e', borderRadius: '52% 48% 42% 58% / 48% 54% 46% 52%', opacity: 0.9 }} />
-          <div style={{ position: 'absolute', left: '20%', top: '10%', width: '20%', height: '14%', background: '#c9b489', borderRadius: '52% 48% 46% 54%', opacity: 0.85 }} />
+          <div style={{ position: 'absolute', left: '8%', top: '18%', width: '46%', height: '34%', background: '#e6c07a', borderRadius: '58% 42% 46% 54% / 54% 48% 52% 46%', opacity: 0.95 }} />
+          <div style={{ position: 'absolute', left: '58%', top: '26%', width: '38%', height: '44%', background: '#d19a5c', borderRadius: '44% 56% 52% 48% / 46% 52% 48% 54%', opacity: 0.92 }} />
+          <div style={{ position: 'absolute', left: '30%', top: '58%', width: '34%', height: '26%', background: '#e8a06b', borderRadius: '52% 48% 42% 58% / 48% 54% 46% 52%', opacity: 0.9 }} />
+          <div style={{ position: 'absolute', left: '20%', top: '10%', width: '20%', height: '14%', background: '#f2d59a', borderRadius: '52% 48% 46% 54%', opacity: 0.85 }} />
         </div>
         <div
           style={{
@@ -95,7 +95,7 @@ export default function GlobeFallback({
             inset: 0,
             borderRadius: '50%',
             background:
-              'radial-gradient(circle at 30% 24%, rgba(255,255,255,.5) 0%, rgba(255,255,255,0) 38%, rgba(0,0,0,0) 64%, rgba(46,60,54,.28) 100%)',  // taste-skill-ignore gradient: 黏土球体/光斑的明暗过渡只能靠渐变，这是 3D 捏制质感的物理依据
+              'radial-gradient(circle at 30% 24%, rgba(255,255,255,.5) 0%, rgba(255,255,255,0) 38%, rgba(0,0,0,0) 64%, rgba(70, 110, 130,.28) 100%)',  // taste-skill-ignore gradient: 水彩球体/光斑的明暗过渡只能靠渐变，这是立体体积的物理依据
           }}
         />
       </div>

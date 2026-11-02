@@ -202,10 +202,10 @@ export default function ClayGlobe({
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // 影棚光：暖主光 + 天青补光 + 背后轮廓光（提亮，塑出温润通透的亮面软陶高光）
-    scene.add(new THREE.AmbientLight(0xfffbf2, 1.28));
+    // 影棚光：暖主光 + 天青补光 + 背后轮廓光（水彩要更柔，压主光提环境光，少硬高光）
+    scene.add(new THREE.AmbientLight(0xfffbf2, 1.34));
 
-    const key = new THREE.DirectionalLight(0xfff7e8, 1.42);
+    const key = new THREE.DirectionalLight(0xfff7e8, 1.25);
     key.position.set(4.2, 5.6, 5.2);
     scene.add(key);
 
@@ -228,18 +228,8 @@ export default function ClayGlobe({
     scene.add(globe);
     globeRef.current = globe;
 
-    // —— 球体：手捏出来的不完全圆 ——
+    // —— 球体：水彩画在光滑纸面上，保持标准球体，不再手捏起伏 ——
     const geom = new THREE.SphereGeometry(R, 96, 96);
-    const pos = geom.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const y = pos.getY(i);
-      const z = pos.getZ(i);
-      const len = Math.hypot(x, y, z);
-      const dents = Math.sin(x * 3.4) * Math.cos(y * 3.4) * 0.022 + Math.sin(z * 5.6) * 0.012;
-      const k = (R + dents) / len;
-      pos.setXYZ(i, x * k, y * k, z * k);
-    }
     geom.computeVertexNormals();
 
     const albedo = createClayEarthTexture(2048, 1024);
@@ -248,9 +238,9 @@ export default function ClayGlobe({
     const mat = new THREE.MeshStandardMaterial({
       map: albedo,
       normalMap: normal,
-      normalScale: new THREE.Vector2(0.62, 0.62),
-      roughness: 0.72,
-      metalness: 0.03,
+      normalScale: new THREE.Vector2(0.35, 0.35),
+      roughness: 0.46,
+      metalness: 0,
     });
     globe.add(new THREE.Mesh(geom, mat));
 
@@ -259,14 +249,14 @@ export default function ClayGlobe({
     scene.add(baseGroup);
 
     const brassMat = new THREE.MeshStandardMaterial({
-      color: 0xe2c47e,
-      roughness: 0.34,
-      metalness: 0.62,
+      color: 0xe8b878,
+      roughness: 0.5,
+      metalness: 0.28,
     });
     const brassDeep = new THREE.MeshStandardMaterial({
-      color: 0xc39a55,
-      roughness: 0.42,
-      metalness: 0.5,
+      color: 0xc98d52,
+      roughness: 0.55,
+      metalness: 0.24,
     });
 
     // 弧：绕球一圈多一点，开口朝左下，像参考插画里那道抱住球的金色带
@@ -578,11 +568,11 @@ export default function ClayGlobe({
         roughness: 0.82,
         metalness: 0.04,
       });
-      // 灯圈用黄铜，跟泥做的灯托拉开材质，小灯才有一圈"金属灯口"的高光
+      // 灯圈用赭石金，跟泥做的灯托拉开材质，小灯才有一圈"金属灯口"的高光
       const rimMat = new THREE.MeshStandardMaterial({
-        color: 0xc9a76a,
-        roughness: 0.34,
-        metalness: 0.55,
+        color: 0xd0a25e,
+        roughness: 0.38,
+        metalness: 0.4,
       });
 
       /*
