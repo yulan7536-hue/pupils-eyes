@@ -5622,3 +5622,481 @@ textarea.input {
   letter-spacing: 0.04em;
   color: rgba(234, 227, 214, 0.55);
 }
+
+/* ============================================================
+   课题成果照片墙（图钉详情页内）
+
+   一条横滑轨道：左边是"上传"，右边是按时间倒序的照片。
+   卡片做成纸相片的样子 —— 白边、细影、下沿压一条角标 —— 和整本书的纸感一致。
+   ============================================================ */
+
+.photowall {
+  margin: 24px 0 4px;
+}
+
+.photowall__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 11px;
+}
+
+.photowall__title {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
+}
+
+.photowall__theme {
+  font-size: 11.5px;
+  letter-spacing: 0;
+  color: var(--ink-faint);
+}
+
+.photowall__meta {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+/* 横滑轨道本身。竖屏下也能一直往右拨，不会把整页撑宽 */
+.photowall__rail {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  padding: 3px 2px 12px;
+  margin: 0 -2px;
+}
+
+.photowall__card,
+.photowall__add {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  width: 128px;
+  height: 128px;
+  border-radius: 13px;
+  overflow: hidden;
+  position: relative;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* ---- 照片卡 ---- */
+
+.photowall__card {
+  border: 0;
+  background: var(--paper-2);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 6px 16px -10px rgba(48, 44, 34, 0.55); /* taste-skill-ignore shadow: 纸相片必须有薄影才立得住，否则像平贴上去的色块 */
+  transition: transform 0.26s var(--ease-clay);
+}
+
+.photowall__card:hover {
+  transform: translateY(-2px);
+}
+
+.photowall__card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photowall__card.is-skeleton {
+  background: linear-gradient(100deg, #ece6d6 30%, #f6f1e4 50%, #ece6d6 70%); /* taste-skill-ignore gradient: 骨架屏的扫光，只能靠渐变 */
+  background-size: 220% 100%;
+  animation: photowall-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes photowall-shimmer {
+  from { background-position: 140% 0; }
+  to   { background-position: -40% 0; }
+}
+
+/* 下沿角标：谁传的 + 身份，照片再花也读得出来 */
+.photowall__cap {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 16px 8px 7px;
+  font-size: 10.5px;
+  color: #fff;
+  background: linear-gradient(to top, rgba(20, 26, 32, 0.72), rgba(20, 26, 32, 0)); /* taste-skill-ignore gradient: 照片亮度不可控，只能靠压边保证文字可读 */
+}
+
+.photowall__who {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.photowall__role {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  background: rgba(255, 255, 255, 0.24);
+  color: #fff;
+}
+
+.photowall__role--teacher {
+  background: rgba(240, 200, 120, 0.42);
+}
+
+/* 教案书页里那一版：书页窄，卡片收一档，正好放得下三张半 */
+.photowall--compact {
+  margin: 18px 0 2px;
+}
+
+.photowall--compact .photowall__card,
+.photowall--compact .photowall__add {
+  width: 104px;
+  height: 104px;
+  border-radius: 11px;
+}
+
+.photowall--compact .photowall__head {
+  margin-bottom: 8px;
+}
+
+.photowall--compact .photowall__rail {
+  gap: 8px;
+  padding-bottom: 9px;
+}
+
+.photowall--compact .photowall__cap {
+  padding: 13px 7px 6px;
+  font-size: 9.5px;
+  gap: 4px;
+}
+
+.photowall--compact .photowall__role {
+  padding: 0 5px;
+  font-size: 8.5px;
+}
+
+.photowall--compact .photowall__add {
+  gap: 5px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+}
+
+.photowall--compact .photowall__add-icon {
+  font-size: 17px;
+}
+
+.photowall--compact .photowall__empty {
+  margin-top: 2px;
+  font-size: 11.5px;
+}
+
+.photowall--compact .photowall__theme {
+  display: none; /* 书页标题就在上面一行，再重复一遍课题名太吵 */
+}
+
+/* ---- 上传卡 ---- */
+
+.photowall__add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1.5px dashed rgba(150, 140, 116, 0.5);
+  background: rgba(255, 255, 255, 0.42);
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  transition: background 0.24s ease, border-color 0.24s ease;
+}
+
+.photowall__add:hover {
+  background: #fff;
+  border-color: rgba(150, 140, 116, 0.8);
+}
+
+.photowall__add-icon {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--ink-faint);
+}
+
+.photowall__empty {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--ink-faint);
+}
+
+/* 站点不在云端放行的域名上时，只留一句指路，不摆一排永远转不完的骨架屏 */
+.photowall__offline {
+  margin: 2px 0 0;
+  padding: 14px 16px;
+  border: 1px dashed rgba(150, 140, 116, 0.42);
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--ink-soft);
+}
+
+.photowall__offline a {
+  margin-left: 6px;
+  color: var(--ink);
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(120, 104, 76, 0.45);
+}
+
+.photowall__note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.photowall__note p {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+/* ---- 放大查看 ---- */
+
+/* 放大浮层与上传面板走 portal 挂到 body 上，所以 z-index 要压过详情页那层 veil（70）；
+   否则它们会被 .veil--soft 的 backdrop-filter 困住，遮罩只剩书页那一块 */
+.photowall__viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 18, 14, 0.74); /* taste-skill-ignore shadow: 遮罩不压深，底下那张亮纸会抢走照片的注意力 */
+  backdrop-filter: blur(10px);
+  animation: veil-in 0.26s var(--ease-soft) both;
+}
+
+.photowall__viewer-inner {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  max-width: min(760px, 92vw);
+  max-height: 88vh;
+}
+
+.photowall__viewer-inner img {
+  max-width: 100%;
+  max-height: 68vh;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.8); /* taste-skill-ignore shadow: 放大态要看得出"浮起来"，否则和背景糊在一起 */
+}
+
+.photowall__viewer-inner figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.photowall__viewer-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  letter-spacing: 0.06em;
+}
+
+.photowall__viewer-cap {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.photowall__viewer-time {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11.5px;
+}
+
+/* 深色遮罩上的收尾按钮：.btn--quiet 是给纸面用的深墨字，压在这层上直接看不见 */
+.photowall__viewer-x {
+  padding: 7px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+  font-family: inherit;
+  font-size: 12.5px;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+  transition: background 0.24s var(--ease-clay), border-color 0.24s var(--ease-clay);
+}
+
+.photowall__viewer-x:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* ---- 上传面板 ---- */
+
+.photowall__sheet-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 92;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(28, 26, 20, 0.42);
+  backdrop-filter: blur(8px);
+  animation: veil-in 0.24s var(--ease-soft) both;
+}
+
+.photowall__sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(420px, 92vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 20px;
+  border-radius: 18px;
+  background: var(--paper);
+  box-shadow: 0 30px 70px -30px rgba(30, 26, 18, 0.7); /* taste-skill-ignore shadow: 浮层与纸面之间需要投影分离 */
+  animation: pop3d-zoom-in 0.32s var(--ease-clay) both;
+}
+
+.photowall__sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+
+.photowall__sheet-x {
+  border: 0;
+  background: none;
+  padding: 4px 6px;
+  font-size: 13px;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.photowall__pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 152px;
+  padding: 0;
+  border: 1.5px dashed rgba(150, 140, 116, 0.5);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.photowall__pick.is-filled {
+  border-style: solid;
+  border-color: rgba(150, 140, 116, 0.3);
+}
+
+.photowall__pick img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  display: block;
+}
+
+.photowall__pick-icon {
+  font-size: 26px;
+  line-height: 1;
+  color: var(--ink-faint);
+}
+
+.photowall__pick-hint {
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.photowall__row {
+  display: flex;
+  gap: 12px;
+}
+
+.photowall__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}
+
+.photowall__seg {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(140, 128, 104, 0.12);
+}
+
+.photowall__seg-btn {
+  flex: 1 1 0;
+  padding: 7px 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.photowall__seg-btn.is-on {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(60, 52, 36, 0.16); /* taste-skill-ignore shadow: 选中态要"浮起"，否则分不清哪个被按下 */
+}
+
+.photowall__err {
+  margin: 0;
+  font-size: 12px;
+  color: #b4483f;
+}
+
+.photowall__sheet-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

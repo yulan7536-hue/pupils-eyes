@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import RadarChart from './RadarChart';
 import PopUpBook from './PopUpBook';
+import PhotoWall from './PhotoWall';
 import type { WorkItem } from '../types';
 import { storySound } from '../utils/sound';
 
@@ -138,6 +139,9 @@ export default function BookSpread({ book, works, onClose, onOpenWork }: BookSpr
         )}
 
         <p className="prose">{active.content}</p>
+
+        {/* 这门课的现场照片：老师在课上拍的、学生课后补传的，都自动归到同一门课下 */}
+        <PhotoWall work={active} compact />
 
         {active.comments.length > 0 && (
           <div className="note">

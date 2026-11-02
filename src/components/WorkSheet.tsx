@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import ClayMotif, { motifFor } from './ClayMotif';
 import RadarChart from './RadarChart';
+import PhotoWall from './PhotoWall';
 import type { WorkItem } from '../types';
 
 interface WorkSheetProps {
@@ -65,6 +66,9 @@ export default function WorkSheet({ work, onClose, onLike, onComment }: WorkShee
               <RadarChart analysis={work.radar} />
             </div>
           )}
+
+          {/* 课题成果照片墙：老师和学生陆续传上来的现场照片，按这门课自动归在一起 */}
+          <PhotoWall work={work} />
 
           <div className="note">
             {work.comments.map((c) => (
