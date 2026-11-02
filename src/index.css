@@ -246,8 +246,10 @@ button {
   transform-origin: 50% 0;
 }
 
-/* 单栏。top 向上多留 10px 余量：旋转时顶边两角的像素会往上翘，
-   没有余量就会被自身的 overflow 切掉，露出底下回填过的模糊底图。 */
+/* 单栏。top 向上多留 10px 余量：剪切时顶边两角的像素会被自身的
+   overflow 切掉，没有余量就会露出底下回填过的模糊底图。
+   transform-origin 的 y 用 10px：那是栏顶那条线，剪切以它为水平零点，
+   所以顶端不动，越往下横移越多。 */
 .wisteria__strand {
   position: absolute;
   top: -10px;
@@ -296,13 +298,16 @@ button {
   background-repeat: no-repeat;
 }
 
-/* 摆的是一挂花的下垂量：顶端几乎不动，越往下甩得越开 */
+/* 摆的是一挂花的下垂量：顶端不动，越往下横向偏得越开。
+   用 skewX 而不是 rotate —— rotate 是让整栏绕顶端画弧，末端在画圆的
+   同时会往上抬（900px 的花串转 2° 就抬 0.5px，一串一串叠起来看就是
+   整片紫藤在上下起伏）。skewX 只改 x，y 一个像素都不动，是纯粹的左右晃。 */
 @keyframes strandSway {
-  0%   { transform: rotate(0deg); }
-  28%  { transform: rotate(calc(var(--amp, 2) * 1deg)); }
-  52%  { transform: rotate(calc(var(--amp, 2) * -0.72 * 1deg)); }
-  74%  { transform: rotate(calc(var(--amp, 2) * 0.28 * 1deg)); }
-  100% { transform: rotate(0deg); }
+  0%   { transform: skewX(0deg); }
+  28%  { transform: skewX(calc(var(--amp, 2) * 1deg)); }
+  52%  { transform: skewX(calc(var(--amp, 2) * -0.72 * 1deg)); }
+  74%  { transform: skewX(calc(var(--amp, 2) * 0.28 * 1deg)); }
+  100% { transform: skewX(0deg); }
 }
 
 @keyframes swayLeft {
@@ -320,19 +325,20 @@ button {
 }
 
 /* 鼠标扫过顶部：整架花被风顶了一下。
-   这一记只给会动的那一层加一点倾角（±0.85°），叠在各栏自己的摆动之上，
+   这一记只给会动的那一层加一点横向剪切（±0.85°），叠在各栏自己的摆动之上，
    不会打断串与串之间的相位差 —— 所以看起来像"又一阵风"，不是"整层在晃"。
+   同样用 skewX：整层 rotate 会让顶边翘起，紫藤就上下起伏了。
    顶盖不在这一层里，风再大藤冠也不会被推走。 */
 .wisteria__body.is-nudge {
   animation: nudgeCurtain 2.6s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 @keyframes nudgeCurtain {
-  0%, 100% { transform: rotate(0deg); }
-  18%      { transform: rotate(0.85deg); }
-  46%      { transform: rotate(-0.62deg); }
-  70%      { transform: rotate(0.3deg); }
-  88%      { transform: rotate(-0.1deg); }
+  0%, 100% { transform: skewX(0deg); }
+  18%      { transform: skewX(-0.85deg); }
+  46%      { transform: skewX(0.62deg); }
+  70%      { transform: skewX(-0.3deg); }
+  88%      { transform: skewX(0.1deg); }
 }
 
 /* 关掉动效偏好：花层全部静止，画面回到一张静帧 */
