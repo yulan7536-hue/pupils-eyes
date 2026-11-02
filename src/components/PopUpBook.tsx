@@ -23,7 +23,7 @@ type Phase = 'flat' | 'up';
 type SheetKind = 'main' | 'detail';
 
 /** 手势翻页阈值（累计位移，px） */
-const SWIPE_THRESHOLD = 35;
+const SWIPE_THRESHOLD = 28;
 /** 触屏滑动阈值（手指位移，px） */
 const TOUCH_THRESHOLD = 48;
 /** 翻页冷却锁：翻页期间丢弃触控板惯性余量，滑一下只翻一页 */
@@ -108,6 +108,7 @@ export default function PopUpBook({ works, onClose, onOpenWork }: PopUpBookProps
     acc: 0, // 本次手势在翻页轴上的累计位移
     last: 0, // 上一个 wheel 事件的时间戳
     lockUntil: 0, // 冷却锁到期时间
+    axis: 0 as 0 | 1 | 2, // 本次手势认定的轴：0 未定 / 1 主向 / 2 副向
     touchX: 0,
     touchY: 0,
   });
@@ -182,15 +183,17 @@ export default function PopUpBook({ works, onClose, onOpenWork }: PopUpBookProps
   }, []);
 
   /**
-   * 触控板滑动翻页，轴向跟着屏幕方向走：
+   * 触控板滑动翻页，轴向优先跟着屏幕方向走：
    *   竖屏 → 双指上下滑动；横屏 → 双指左右滑动。
+   * 但两根轴都收：窗口窄而扁时（布局已按竖屏堆叠、媒体查询却仍是 landscape）
+   * 只认一根轴就等于把这个尺寸段的手势全废掉。
    *
    * 触控板一次滑动会被拆成几十个 wheel 事件，且松手后还有惯性余量，
    * 所以：先在翻页轴上累计位移、跨过阈值才翻页，翻页瞬间上冷却锁，
    * 惯性余量在锁内只被丢弃、不再触发，保证"滑一下只翻一页"。
    * 位移为正（竖屏双指下滑 / 横屏双指左滑，内容往后走）→ 下一页。
    * 竖屏时右页简介这类内层可滚动文字块先吃满自己的滚动，滚到边界才接管翻页。
-   * 非翻页轴的横向手势一律 preventDefault，拦掉浏览器"双指左右滑 → 历史后退"。
+   * 任何被接管的手势都 preventDefault，拦掉浏览器"双指滑动 → 历史后退"。
    */
   useEffect(() => {
     const el = rootRef.current;
@@ -199,9 +202,20 @@ export default function PopUpBook({ works, onClose, onOpenWork }: PopUpBookProps
 
     const onWheel = (e: WheelEvent) => {
       if (live.current.closing || live.current.zoomed) return;
+      // 监听挂在 window 的捕获阶段：只要相册还开着，光标停在哪一格都能收到。
+      // 之前挂在 .veil 上，命中层级一旦被 3D 舞台或某些浮层岔开就彻底静音。
+      if (!el.contains(e.target as Node) && e.target !== document.body && e.target !== document.documentElement) {
+        return;
+      }
 
       const now = performance.now();
-      if (now - g.last > GESTURE_GAP) g.acc = 0;
+      if (now - g.last > GESTURE_GAP) {
+        // 手势断了一下。这里不能把累计位移清零：慢速滑动、或者设备把一次
+        // 滑动拆成间隔较大的几个事件时，每段都从零开始就永远攒不过阈值，
+        // 表现就是"滑了半天不动"。改成衰减，慢滑照样能累积，快滑也不受影响。
+        g.acc *= 0.5;
+        g.axis = 0;
+      }
       g.last = now;
 
       // deltaMode: 0 像素 / 1 行 / 2 页 —— 统一折算成像素，Firefox 的行模式才不会失灵
@@ -209,31 +223,38 @@ export default function PopUpBook({ works, onClose, onOpenWork }: PopUpBookProps
       const dx = e.deltaX * unit;
       const dy = e.deltaY * unit;
 
-      // 竖屏读上下、横屏读左右；另一根轴上的手势不算翻页
+      // 竖屏读上下、横屏读左右；但两根轴都认。
+      // 窗口比布局断点窄、却仍是 landscape 时（窄而扁的窗口），
+      // 只认一根轴就会出现"提示让上下滑、代码却在等左右滑"的死角，
+      // 竖屏下双指稍微带点横向偏移也会被判成无效手势 —— 索性两根轴都收。
       const vert = isPortrait();
-      const main = vert ? dy : dx;
-      const cross = vert ? dx : dy;
+      const primary = vert ? dy : dx;
+      const secondary = vert ? dx : dy;
 
-      // 另一根轴占优：明确不翻页，但截住浏览器手势（历史前进/后退）
-      if (Math.abs(cross) > Math.abs(main)) {
-        if (e.cancelable) e.preventDefault();
-        return;
+      // 轴只在手势起点定一次，中途不换，斜着滑时符号才不会来回翻
+      if (g.axis === 0) {
+        if (Math.abs(primary) < 2 && Math.abs(secondary) < 2) return;
+        g.axis = Math.abs(primary) >= Math.abs(secondary) ? 1 : 2;
       }
-      if (Math.abs(main) < 2) return;
+      const main = g.axis === 1 ? primary : secondary;
 
       // 竖屏且内层文字块还能继续滚 → 交还原生滚动，不抢
       if (vert && scrollsInside(e.target, el, dy)) return;
 
-      // 接管这一帧：顺手吃掉橡皮筋回弹
+      // 接管这一帧：顺手吃掉橡皮筋回弹与边缘历史手势
       if (e.cancelable) e.preventDefault();
 
+      if (Math.abs(main) < 2) return;
       if (now < g.lockUntil) return; // 冷却中：惯性余量直接丢弃
 
       g.acc += main;
-      if (Math.abs(g.acc) < SWIPE_THRESHOLD) return;
+      // 一记快拨有时只来一个事件，靠累积永远读不到：单次位移够大就当场翻
+      const flick = Math.abs(main) >= SWIPE_THRESHOLD * 1.6;
+      if (!flick && Math.abs(g.acc) < SWIPE_THRESHOLD) return;
 
       const dir: 1 | -1 = g.acc > 0 ? 1 : -1; // 内容往后走 → 下一页
       g.acc = 0;
+      g.axis = 0;
       live.current.turn(dir);
     };
 
@@ -277,25 +298,29 @@ export default function PopUpBook({ works, onClose, onOpenWork }: PopUpBookProps
       }
     };
 
-    el.addEventListener('wheel', onWheel, { passive: false });
+    // 捕获阶段挂在 window：相册是模态的，这一段没有任何别的滚动区需要谦让，
+    // 挂在顶层比挂在某个具体节点上稳，不会因为命中层级变化而整段静音
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true });
     el.addEventListener('touchstart', onTouchStart, { passive: true });
     el.addEventListener('touchmove', onTouchMove, { passive: false });
     el.addEventListener('touchend', onTouchEnd, { passive: true });
 
     return () => {
-      el.removeEventListener('wheel', onWheel);
+      window.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions);
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
     };
   }, []);
 
-  /* 键盘：← → 翻页，Esc 合上 */
+  /* 键盘：← → 翻页，Esc 合上；竖屏再认 ↑ ↓ / PgUp PgDn，没触控板也能翻 */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
       else if (e.key === 'ArrowLeft') turn(-1);
       else if (e.key === 'ArrowRight') turn(1);
+      else if (e.key === 'ArrowUp' || e.key === 'PageUp') turn(-1);
+      else if (e.key === 'ArrowDown' || e.key === 'PageDown') turn(1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

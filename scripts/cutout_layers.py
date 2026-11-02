@@ -168,7 +168,8 @@ def build_strands(alpha: np.ndarray, W: int, H: int):
         ox0, ox1 = x0 - bl, x1 + br
         ow = ox1 - ox0
         # 相位：相邻栏错开一点 → 一道从左往右走的波；幅度用低频正弦错开，避免整齐划一
-        amp = 2.1 + 0.5 * np.sin(i * 1.13 + 0.4)
+        # 顶盖已经把藤冠定死，摆幅只作用在下垂的花串上，整体收一档更像风
+        amp = 1.75 + 0.4 * np.sin(i * 1.13 + 0.4)
         dur = 5.5 + 0.55 * np.sin(i * 0.71 + 1.9)
         delay = -0.17 * i
         out.append({

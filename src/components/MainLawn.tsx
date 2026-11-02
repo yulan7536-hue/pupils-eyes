@@ -201,28 +201,39 @@ export default function MainLawn({
       {/* 2. 顶层紫藤：一挂一栏，各绕自己顶端摆（栏位由 cutout 脚本按花串空隙切出来）。
              整层一起转等于把画框顶边当合页，串与串之间没有相对运动，看着像画在晃。 */}
       <div
-        className={`scene__wisteria${isWisteriaSwaying ? ' is-nudge' : ''}`}
+        className="scene__wisteria"
         style={{ '--wis': `url('${SCENE_LAYERS.wisteria}')` } as CSSProperties}
         aria-hidden="true"
       >
-        {WISTERIA_STRANDS.map((s, i) => (
-          <div
-            key={i}
-            className="wisteria__strand"
-            style={{
-              left: `${s.left}%`,
-              width: `${s.width}%`,
-              '--amp': s.amp,
-              '--dur': `${s.dur}s`,
-              '--delay': `${s.delay}s`,
-            } as CSSProperties}
-          >
+        {/* 会动的那一层单独包起来：鼠标掠过的"一记风"只推这一层，
+            顶盖不跟着转，否则整层一转，刚钉死的藤冠又被推走了。 */}
+        <div className={`wisteria__body${isWisteriaSwaying ? ' is-nudge' : ''}`}>
+          {WISTERIA_STRANDS.map((s, i) => (
             <div
-              className="wisteria__img"
-              style={{ left: `${s.imgLeft}%`, width: `${s.imgWidth}%` }}
-            />
-          </div>
-        ))}
+              key={i}
+              className="wisteria__strand"
+              style={{
+                left: `${s.left}%`,
+                width: `${s.width}%`,
+                '--amp': s.amp,
+                '--dur': `${s.dur}s`,
+                '--delay': `${s.delay}s`,
+              } as CSSProperties}
+            >
+              <div
+                className="wisteria__img"
+                style={{ left: `${s.imgLeft}%`, width: `${s.imgWidth}%` }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* 顶盖：一张不参与动画的同款底片，只留最上面那截藤冠。
+            栏是按列切的，转起来之后顶部这一片密密麻麻的藤冠会被相邻栏
+            拉出几像素的错位，远看就是"整个顶在晃"。盖上这一层，藤冠是死的，
+            只有下方的花串在摆 —— 也就是真花的样子：上面缠在架子上，下面随风摆。
+            盖层是同一张图、同一处取景，静止时与下方完全重合，看不出接缝。 */}
+        <div className="wisteria__cap" />
       </div>
 
       {/* 3. 左右两棵边缘粉色花树，各自绕树根摆 */}
