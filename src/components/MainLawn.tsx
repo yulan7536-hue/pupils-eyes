@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom';
 import Desk from './Desk';
 import ClayGlobe from './ClayGlobe';
+import { WISTERIA_STRANDS } from './wisteriaStrands';
 import type { PinItem, WorkItem } from '../types';
 
 /** 背景四层资源的地址。必须走 BASE_URL —— 项目站点部署在 /pupils-eyes/ 子路径下，
@@ -197,12 +198,32 @@ export default function MainLawn({
         aria-hidden="true"
       />
 
-      {/* 2. 顶层紫藤：从画面顶端垂下来，鼠标扫过时加一记力 */}
+      {/* 2. 顶层紫藤：一挂一栏，各绕自己顶端摆（栏位由 cutout 脚本按花串空隙切出来）。
+             整层一起转等于把画框顶边当合页，串与串之间没有相对运动，看着像画在晃。 */}
       <div
         className={`scene__wisteria${isWisteriaSwaying ? ' is-nudge' : ''}`}
-        style={{ backgroundImage: `url('${SCENE_LAYERS.wisteria}')` }}
+        style={{ '--wis': `url('${SCENE_LAYERS.wisteria}')` } as CSSProperties}
         aria-hidden="true"
-      />
+      >
+        {WISTERIA_STRANDS.map((s, i) => (
+          <div
+            key={i}
+            className="wisteria__strand"
+            style={{
+              left: `${s.left}%`,
+              width: `${s.width}%`,
+              '--amp': s.amp,
+              '--dur': `${s.dur}s`,
+              '--delay': `${s.delay}s`,
+            } as CSSProperties}
+          >
+            <div
+              className="wisteria__img"
+              style={{ left: `${s.imgLeft}%`, width: `${s.imgWidth}%` }}
+            />
+          </div>
+        ))}
+      </div>
 
       {/* 3. 左右两棵边缘粉色花树，各自绕树根摆 */}
       <div

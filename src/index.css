@@ -170,15 +170,14 @@ button {
      base       z 0    挖掉花、平滑回填的底图
      desk       z 10   书桌（中景）
      bloom L/R  z 20   左右两棵边缘粉花树
-     wisteria   z 30   顶部紫藤
+     wisteria   z 30   顶部紫藤（内部再拆成一串一栏）
 
    分层的目的不是拼贴，是让"只有花动"成为可能：整张背景图一起晃
    会晕，只有花自己摆才像风。
    ============================================================ */
 
 .scene__photo,
-.scene__flora,
-.scene__wisteria {
+.scene__flora {
   position: absolute;
   inset: 0;
   background-repeat: no-repeat;
@@ -193,8 +192,7 @@ button {
 
 /* ---- 花层：各自绕自己的根部摆 ---- */
 
-.scene__flora,
-.scene__wisteria {
+.scene__flora {
   will-change: transform;
   backface-visibility: hidden;
 }
@@ -213,18 +211,64 @@ button {
   animation: swayRight 6.8s ease-in-out infinite;
 }
 
-/* 紫藤：从画面顶端垂下来，绕顶边中点摆，越往下摆幅越大 */
+/* ============================================================
+   顶部紫藤：一串一栏，各绕自己顶端摆。
+
+   为什么不整层转：紫藤是一挂一挂垂下来的，整层刚性旋转等于把整幅画
+   顶边当合页，串与串之间没有任何相对运动 —— 看着像有人扶着画框在摇。
+   真风里每挂花的相位、幅度、周期都不一样，风是一道推过去的。
+
+   做法：把花串按"空隙"竖切成 19 栏（空隙处 alpha 为 0，切线上没有像素，
+   所以怎么转都不会露缝），每栏 = 一个 overflow:hidden 的窗口 + 一张放大
+   到整幅图尺寸的底片，窗口只露出自己那一栏。各栏绕自己顶边中点转，
+   靠 animation-delay 依次错开 → 一道从左往右走的波。
+
+   取景框用 max(100%, 100vh*1.7917) 复刻 background-size: cover 的裁剪框，
+   与底图/粉花层逐像素对齐（和 .garden-interactive-overlay 用的是同一套算法）。
+   ============================================================ */
+
 .scene__wisteria {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: max(100%, calc(100vh * 1.7917));
+  height: max(100%, calc(100vw / 1.7917));
+  transform: translateX(-50%);
+  transform-origin: 50% 0;
   z-index: 30;
-  transform-origin: 50% 0%;
-  animation: swayTop 5.4s ease-in-out infinite;
+  pointer-events: none;
 }
 
-@keyframes swayTop {
-  0%, 100% { transform: rotate(0deg); }
-  22%      { transform: rotate(1.15deg) skewX(0.2deg); }
-  51%      { transform: rotate(-0.85deg) skewX(-0.15deg); }
-  76%      { transform: rotate(0.4deg); }
+/* 单栏。top 向上多留 10px 余量：旋转时顶边两角的像素会往上翘，
+   没有余量就会被自身的 overflow 切掉，露出底下回填过的模糊底图。 */
+.wisteria__strand {
+  position: absolute;
+  top: -10px;
+  bottom: 0;
+  overflow: hidden;
+  transform-origin: 50% 10px;
+  animation: strandSway var(--dur, 5.6s) ease-in-out var(--delay, 0s) infinite;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* 栏内的底片：宽度撑到整幅图宽，靠内联的 left/width 对齐到本栏应有的位置 */
+.wisteria__img {
+  position: absolute;
+  top: 10px;
+  bottom: 0;
+  background-image: var(--wis);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+/* 摆的是一挂花的下垂量：顶端几乎不动，越往下甩得越开 */
+@keyframes strandSway {
+  0%   { transform: rotate(0deg); }
+  28%  { transform: rotate(calc(var(--amp, 2) * 1deg)); }
+  52%  { transform: rotate(calc(var(--amp, 2) * -0.72 * 1deg)); }
+  74%  { transform: rotate(calc(var(--amp, 2) * 0.28 * 1deg)); }
+  100% { transform: rotate(0deg); }
 }
 
 @keyframes swayLeft {
@@ -241,25 +285,26 @@ button {
   80%      { transform: rotate(0.2deg); }
 }
 
-/* 鼠标扫过顶部时的加力一摆：幅度更大、只走一遍 */
+/* 鼠标扫过顶部：整架花被风顶了一下。
+   这一记只给取景框加一点倾角（±0.85°），叠在各栏自己的摆动之上，
+   不会打断串与串之间的相位差 —— 所以看起来像"又一阵风"，不是"整层在晃"。 */
 .scene__wisteria.is-nudge {
-  animation: nudgeTop 2.6s cubic-bezier(0.25, 1, 0.5, 1);
+  animation: nudgeCurtain 2.6s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-@keyframes nudgeTop {
-  0%   { transform: rotate(0deg); }
-  20%  { transform: rotate(2.1deg) skewX(0.35deg); }
-  46%  { transform: rotate(-1.7deg) skewX(-0.28deg); }
-  70%  { transform: rotate(0.9deg); }
-  88%  { transform: rotate(-0.3deg); }
-  100% { transform: rotate(0deg); }
+@keyframes nudgeCurtain {
+  0%, 100% { transform: translateX(-50%) rotate(0deg); }
+  18%      { transform: translateX(-50%) rotate(0.85deg); }
+  46%      { transform: translateX(-50%) rotate(-0.62deg); }
+  70%      { transform: translateX(-50%) rotate(0.3deg); }
+  88%      { transform: translateX(-50%) rotate(-0.1deg); }
 }
 
-/* 关掉动效偏好：三层全部静止，画面回到一张静帧 */
+/* 关掉动效偏好：花层全部静止，画面回到一张静帧 */
 @media (prefers-reduced-motion: reduce) {
   .scene__flora--left,
   .scene__flora--right,
-  .scene__wisteria,
+  .wisteria__strand,
   .scene__wisteria.is-nudge {
     animation: none;
   }
