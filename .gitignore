@@ -23,3 +23,7 @@ public/assets/aistudio/
 .vscode/
 *.swp
 *.swo
+
+# 抠图 QA 预览（脚本产物，不入库）
+.cutout-qa/
+.venv-img/

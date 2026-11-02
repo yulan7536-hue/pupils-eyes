@@ -4,6 +4,16 @@ import Desk from './Desk';
 import ClayGlobe from './ClayGlobe';
 import type { PinItem, WorkItem } from '../types';
 
+/** 背景四层资源的地址。必须走 BASE_URL —— 项目站点部署在 /pupils-eyes/ 子路径下，
+ *  写在 JS 字符串里的根路径 Vite 不会改写，会全部 404。 */
+const ASSET = import.meta.env.BASE_URL;
+const SCENE_LAYERS = {
+  base: `${ASSET}scene/base.webp`,
+  wisteria: `${ASSET}scene/wisteria.webp`,
+  bloomLeft: `${ASSET}scene/bloom-left.webp`,
+  bloomRight: `${ASSET}scene/bloom-right.webp`,
+} as const;
+
 interface MainLawnProps {
   pins: PinItem[];
   works: WorkItem[];
@@ -178,24 +188,36 @@ export default function MainLawn({
 
   return (
     <>
-    <div className={`scene stage-in ${isWisteriaSwaying ? 'wisteria-swaying' : ''}`}>
-      {/* 1. 铺上刚上传的三渲二世界秘密花园背景大图 */}
-      <div 
-        className="scene__photo" 
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundImage: `url('${import.meta.env.BASE_URL}garden-bg.jpg')`,
-          backgroundPosition: 'center bottom',
-          backgroundSize: 'cover',
-          backgroundRepeat: 'no-repeat',
-          zIndex: 0,
-        }}
-        aria-hidden="true" 
+    <div className="scene stage-in">
+      {/* 1. 背景拆成四层：底图 → 书桌 → 左右粉花树 → 顶部紫藤。
+             分层是为了让"只有花动"：整张图一起晃会晕，只有花自己摆才像风。 */}
+      <div
+        className="scene__photo"
+        style={{ backgroundImage: `url('${SCENE_LAYERS.base}')` }}
+        aria-hidden="true"
       />
 
-      {/* 2. 顶部紫藤鼠标微风交互热区 */}
-      <div 
+      {/* 2. 顶层紫藤：从画面顶端垂下来，鼠标扫过时加一记力 */}
+      <div
+        className={`scene__wisteria${isWisteriaSwaying ? ' is-nudge' : ''}`}
+        style={{ backgroundImage: `url('${SCENE_LAYERS.wisteria}')` }}
+        aria-hidden="true"
+      />
+
+      {/* 3. 左右两棵边缘粉色花树，各自绕树根摆 */}
+      <div
+        className="scene__flora scene__flora--left"
+        style={{ backgroundImage: `url('${SCENE_LAYERS.bloomLeft}')` }}
+        aria-hidden="true"
+      />
+      <div
+        className="scene__flora scene__flora--right"
+        style={{ backgroundImage: `url('${SCENE_LAYERS.bloomRight}')` }}
+        aria-hidden="true"
+      />
+
+      {/* 4. 顶部紫藤鼠标微风交互热区 */}
+      <div
         className="wisteria-hover-zone"
         onMouseEnter={triggerWisteria}
         title="微风拂过紫藤"
