@@ -1458,11 +1458,14 @@ button {
   border: 1px dashed var(--retro-ink-stroke);
 }
 
-/* 图钉悬停气泡 */
+/* 小灯悬停气泡 */
 .pin-tip {
   position: fixed;
   z-index: 64;
   transform: translate(-50%, -100%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: calc(var(--u) * 0.7) calc(var(--u) * 1.5);
   border-radius: 999px;
   background: rgba(248, 244, 232, 0.96);
@@ -1473,6 +1476,27 @@ button {
   white-space: nowrap;
   pointer-events: none;
   box-shadow: 0 calc(var(--u) * 0.4) calc(var(--u) * 1.1) rgba(40, 50, 42, 0.28); /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
+}
+
+/* 气泡里那盏小灯的状态点：熄灭是哑光陶土，点亮是暖光琥珀 */
+.pin-tip__dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #c9bda3;
+  box-shadow: inset 0 0 0 1px rgba(74, 58, 34, 0.22);
+}
+
+.pin-tip__dot.is-lit {
+  background: #ffc978;
+  box-shadow: 0 0 7px 2px rgba(255, 176, 88, 0.6); /* taste-skill-ignore shadow: 小灯的暖光晕 */
+}
+
+.pin-tip__lit {
+  font-size: 0.86em;
+  letter-spacing: 0.08em;
+  color: #b07b3c;
 }
 
 /* ============================================================
@@ -1923,6 +1947,24 @@ textarea.input {
   background: #8f6a68;
 }
 
+/* 已点亮：按钮变成一枚"灯已亮"的状态牌，不再可点 */
+.btn--lit,
+.btn--lit:hover,
+.btn--lit:active {
+  background: #dcb87c;
+  color: #4a3a22;
+  cursor: default;
+  transform: none;
+  box-shadow: /* taste-skill-ignore shadow: 黏土静物必须有厚度与接地阴影，否则会像贴纸浮在桌面上 */
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -2px 5px rgba(120, 82, 34, 0.3),
+    0 0 20px -2px rgba(255, 186, 104, 0.68);
+}
+
+.btn:disabled {
+  cursor: default;
+}
+
 .btn--full {
   width: 100%;
   min-width: 0;
@@ -2030,6 +2072,13 @@ textarea.input {
 .sheet__body {
   padding: clamp(18px, 2.4vmin, 28px);
   overflow-y: auto;
+}
+
+/* 详情页底栏：这盏灯已经亮了的提示 */
+.sheet__lit-note {
+  font-size: clamp(11.5px, 1.2vmin, 13px);
+  letter-spacing: 0.06em;
+  color: #b07b3c;
 }
 
 /* ============================================================

@@ -135,7 +135,7 @@ export default function RegionDialog({ onClose, onConfirm }: RegionDialogProps) 
         <h2 className="dialog__title" id="region-title">
           选择课题坐标
         </h2>
-        <p className="dialog__sub">选好落点，确认后立即在地球仪上钉一枚新图钉。</p>
+        <p className="dialog__sub">选好落点，确认后立即在地球仪上安放一盏小灯。</p>
 
         <form onSubmit={submit}>
           <label className="field">

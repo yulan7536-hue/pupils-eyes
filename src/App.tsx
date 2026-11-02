@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import OpeningVideo from './components/OpeningVideo';
@@ -65,6 +65,16 @@ export default function App() {
   const [chaseAlive, setChaseAlive] = useState(false);
   const [pins, setPins] = useState<PinItem[]>(() => loadSavedPins());
   const [works, setWorks] = useState<WorkItem[]>(() => loadSavedWorks());
+
+  /**
+   * 球面上哪些灯是亮的。
+   * 灯的 id 与它对应的成果 id 一致（都是 `pin-…`），所以这里只要从 works 里
+   * 捞出被点亮的那几份，地球仪就知道该让哪盏灯发光。
+   */
+  const litPinIds = useMemo(
+    () => new Set(works.filter((w) => w.lit).map((w) => w.id)),
+    [works]
+  );
 
   // 原有大模型教案雷达图逻辑：全量保留
   useEffect(() => {
@@ -165,9 +175,9 @@ export default function App() {
           lat: coord.lat,
           lon: coord.lon,
           school: '行智开物工作站',
-          desc: `已落钉，正在为【${locationString}】录入成果`,
+          desc: `已点亮一盏小灯，正在为【${locationString}】录入成果`,
           role: 'STUDENT',
-          date: '刚刚落钉',
+          date: '刚刚点亮',
         },
         ...prev.filter((p) => !p.id.startsWith('draft-')),
       ]);
@@ -224,7 +234,7 @@ export default function App() {
     setRoleOpen(false);
     setGlobeOpen(false);
     later(() => setNewPinId(null), 2400);
-    say(`图钉已定格 · 童眼看 ${payload.district}`);
+    say(`小灯已安放 · 童眼看 ${payload.district}`);
   };
 
   const openPin = (pin: PinItem) => {
@@ -326,6 +336,11 @@ export default function App() {
   }, [activeArtifactKey]);
 
   const modalOpen = book !== null || sheet !== null;
+  /**
+   * 详情页永远读 works 里的最新那份，而不是点击瞬间的快照。
+   * 否则"点亮"之后卡片上的灯还暗着、数字也不动，得关掉再开才刷新。
+   */
+  const sheetWork = sheet ? works.find((w) => w.id === sheet.id) ?? sheet : null;
   const currentArtifact = activeArtifactKey ? artifactDatabase[activeArtifactKey] : null;
 
   return (
@@ -345,6 +360,7 @@ export default function App() {
         <MainLawn
           pins={pins}
           works={works}
+          litPinIds={litPinIds}
           globeOpen={globeOpen}
           globeChrome={globeOpen && !roleOpen && !regionOpen}
           onToggleGlobe={() => {
@@ -404,15 +420,18 @@ export default function App() {
         />
       )}
 
-      {sheet && (
+      {sheetWork && (
         <WorkSheet
-          work={sheet}
+          work={sheetWork}
           onClose={() => setSheet(null)}
-          onLike={(id) =>
+          onLike={(id) => {
             setWorks((prev) =>
-              prev.map((w) => (w.id === id ? { ...w, likes: w.likes + 1 } : w))
-            )
-          }
+              prev.map((w) =>
+                w.id === id ? { ...w, likes: w.likes + 1, lit: true } : w
+              )
+            );
+            say('球面上的小灯亮了 · 这份成果被点亮');
+          }}
           onComment={(id, text) =>
             setWorks((prev) =>
               prev.map((w) =>
@@ -440,7 +459,7 @@ export default function App() {
           location={draftLoc}
           onClose={() => {
             setRoleOpen(false);
-            say('图钉已留在球面上，随时可以补上成果');
+            say('小灯已留在球面上，随时可以补上成果');
           }}
           onSubmit={submitWork}
         />

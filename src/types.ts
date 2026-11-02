@@ -41,6 +41,11 @@ export interface WorkItem {
   date: string;
   likes: number;
   comments: Comment[];
+  /**
+   * 这份成果是否在地球仪上被点亮。
+   * 点了「点亮这份成果」之后写 true，球面那盏小灯就亮起来；跟着 works 一起存本地。
+   */
+  lit?: boolean;
   /** AI 教案解析结果：教师上传后由 analyzeLesson 生成，学生成果为 undefined */
   radar?: RadarAnalysis;
 }

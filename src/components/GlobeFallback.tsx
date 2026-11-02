@@ -3,16 +3,19 @@ import type { PinItem } from '../types';
 
 /**
  * 没有 WebGL 时的黏土地球仪（2D）。
- * 用同样的莫兰迪泥色与投影把球、底座、图钉立起来，功能（自转 / 悬停 / 点击放大）不变。
+ * 用同样的莫兰迪泥色与投影把球、底座、小灯立起来，功能（自转 / 悬停 / 点击放大）不变。
+ * 被点亮的那几盏灯同样会透出暖光。
  */
 export default function GlobeFallback({
   pins,
   size,
+  litPinIds,
   onToggleZoom,
   zoomed,
 }: {
   pins: PinItem[];
   size: number;
+  litPinIds: Set<string>;
   onToggleZoom: () => void;
   zoomed: boolean;
 }) {
@@ -97,7 +100,7 @@ export default function GlobeFallback({
         />
       </div>
 
-      {/* 图钉 */}
+      {/* 小灯：灯珠在上、灯杆居中、泥底座压在最下面，整盏灯站在球面上 */}
       {pins.map((pin) => {
         const lam = ((pin.lon + 180) * Math.PI) / 180 + angle;
         const phi = ((90 - pin.lat) * Math.PI) / 180;
@@ -106,24 +109,50 @@ export default function GlobeFallback({
         const z = Math.sin(phi) * Math.sin(lam);
         if (z < 0.06) return null;
         const isTeacher = pin.role === 'TEACHER';
+        const lit = litPinIds.has(pin.id);
+        const w = Math.max(8, Math.round(size * 0.032));
         return (
           <span
             key={pin.id}
-            title={`童眼看 ${pin.city.split('·').pop()}`}
+            title={`童眼看 ${pin.city.split('·').pop()}${lit ? ' · 已点亮' : ''}`}
             style={{
               position: 'absolute',
               left: `${50 + x * R}%`,
               top: `${7 + R - y * R}%`,
-              width: '2.4%',
-              aspectRatio: '1',
-              minWidth: 6,
-              borderRadius: '50%',
-              background: isTeacher ? '#b58c8a' : '#d3bc8d',
-              boxShadow: 'inset -1px -1px 2px rgba(0,0,0,.28), 0 2px 4px rgba(40,50,44,.4)',
-              transform: 'translate(-50%, -50%)',
+              transform: 'translate(-50%, -100%)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              width: w,
+              opacity: 0.6 + z * 0.4,
+              pointerEvents: 'none',
               zIndex: 2,
             }}
-          />
+          >
+            <span
+              style={{
+                width: Math.round(w * 0.82),
+                height: Math.round(w * 0.82),
+                borderRadius: '50%',
+                border: '1px solid rgba(176,138,84,.6)',
+                background: lit
+                  ? 'radial-gradient(circle at 38% 32%, #fffbef 0%, #ffd79a 46%, #f0a75d 100%)'
+                  : 'radial-gradient(circle at 38% 32%, #fffaf2 0%, #f1e5cf 56%, #dcc8a6 100%)',
+                boxShadow: lit
+                  ? `0 0 ${Math.round(w * 0.5)}px ${Math.round(w * 0.28)}px rgba(255,186,104,.62), inset -1px -1px 2px rgba(120,80,30,.32)`
+                  : 'inset -1px -1px 2px rgba(90,70,40,.3)',
+              }}
+            />
+            <span
+              style={{
+                width: w,
+                height: Math.max(2, Math.round(w * 0.16)),
+                borderRadius: '50%',
+                background: isTeacher ? '#c07b70' : '#d3a97a',
+                boxShadow: '0 1px 2px rgba(40,50,44,.35)',
+              }}
+            />
+          </span>
         );
       })}
     </div>

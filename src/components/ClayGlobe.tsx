@@ -9,17 +9,70 @@ interface ClayGlobeProps {
   pins: PinItem[];
   /** 画布边长（px）。尺寸由外层根据视口算好后传入 */
   size: number;
+  /** 已经被点亮的成果 id（= 球面小灯的 id），这些灯要发亮 */
+  litPinIds: Set<string>;
   zoomed: boolean;
   activeTargetCoord: { lat: number; lon: number } | null;
   newlyDroppedPinId: string | null;
   onSelectPin: (pin: PinItem) => void;
   onHoverPin: (pin: PinItem | null, clientX: number, clientY: number) => void;
-  /** 落钉瞬间把新图钉的屏幕坐标抛出来，让"啪！"打在钉子上 */
+  /** 安放瞬间把新灯的屏幕坐标抛出来，让"啪！"打在灯上 */
   onPinAnchor?: (at: { x: number; y: number } | null) => void;
   onToggleZoom: () => void;
 }
 
 const R = 2;
+
+/**
+ * 小灯贴着球面站住时，灯座底面所在的半径。
+ * 球体本身被捏过（起伏 ±0.03），这里留 0.001 的余量，既不悬空也不陷进泥里。
+ */
+const LAMP_AT = R + 0.012;
+
+/** 灯座/灯杆的黏土色：老师一盏豆沙，学生按序轮换，和图钉时代的分色一致 */
+const LAMP_BASE_COLORS = [0xd3a97a, 0x8fae5e, 0x8aa9a1];
+const LAMP_BASE_TEACHER = 0xc07b70;
+const LAMP_GLASS = 0xf6dfb4;
+const LAMP_EMISSIVE = 0xffb565;
+
+/** 一圈暖光的贴图（灯亮时挂在灯珠上，做出"光圈化开"的观感）。只做一次，反复用。 */
+let glowTexture: THREE.Texture | null = null;
+function getGlowTexture(): THREE.Texture {
+  if (glowTexture) return glowTexture;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(255, 226, 176, 0.95)');
+  g.addColorStop(0.28, 'rgba(255, 198, 122, 0.5)');
+  g.addColorStop(0.62, 'rgba(255, 176, 96, 0.16)');
+  g.addColorStop(1, 'rgba(255, 170, 90, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  glowTexture = new THREE.CanvasTexture(canvas);
+  glowTexture.colorSpace = THREE.SRGBColorSpace;
+  return glowTexture;
+}
+
+/** 一盏灯的动画状态：p = 亮起进度 0→1，flash = 刚被点亮时那一下过曝 */
+interface LampHandle {
+  bulbMat: THREE.MeshStandardMaterial;
+  haloMat: THREE.SpriteMaterial;
+  halo: THREE.Sprite;
+  phase: number;
+  lit: boolean;
+  p: number;
+  flash: number;
+}
+
+/** 建灯时先把亮度定格在初始状态（该亮的已经亮着），别从黑里淡入一遍 */
+function paintInitialLamp(lamp: LampHandle) {
+  lamp.bulbMat.emissiveIntensity = 0.04 + lamp.p * 1.32;
+  lamp.haloMat.opacity = lamp.p * 0.62;
+  const s = 0.2 + lamp.p * 0.2;
+  lamp.halo.scale.set(s, s, 1);
+}
 
 /** 经纬度 → 球面坐标 */
 function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
@@ -55,6 +108,7 @@ function orientTo(lat: number, lon: number): THREE.Quaternion {
 export default function ClayGlobe({
   pins,
   size,
+  litPinIds,
   zoomed,
   activeTargetCoord,
   newlyDroppedPinId,
@@ -71,6 +125,15 @@ export default function ClayGlobe({
   const globeRef = useRef<THREE.Group | null>(null);
   const pinsRef = useRef<THREE.Group | null>(null);
   const ripplesRef = useRef<THREE.Group | null>(null);
+
+  /** id → 灯的动画句柄。重建灯塔时同步重建，点亮时只改材质，不重建场景 */
+  const lampsRef = useRef<Map<string, LampHandle>>(new Map());
+  /**
+   * 建灯时要读"当前亮没亮"。用 ref 而不是把 litPinIds 塞进建灯 effect 的依赖：
+   * 否则每点亮一次就把所有灯拆了重建，刚落下的那盏的弹跳动画会被打断。
+   */
+  const litRef = useRef(litPinIds);
+  litRef.current = litPinIds;
 
   // 回调放进 ref，避免因为函数身份变化重建整个 WebGL 场景
   const onSelectRef = useRef(onSelectPin);
@@ -340,10 +403,40 @@ export default function ClayGlobe({
     const STEP = 1 / 14; // 定格动画的抽帧节奏
     let raf = 0;
 
+    /**
+     * 把动画状态刷到材质上。
+     * 熄灭：只剩玻璃的一点温色；点亮：灯珠过曝成暖白，外圈光晕化开。
+     * 亮着的时候留一点呼吸，灯才像"活着"，不像贴了两层发光贴图。
+     */
+    const paintLamp = (lamp: LampHandle, nowSec: number) => {
+      const breath =
+        0.93 +
+        Math.sin(nowSec * 1.7 + lamp.phase) * 0.05 +
+        Math.sin(nowSec * 4.3 + lamp.phase * 2.1) * 0.025;
+      const flash = lamp.flash * 1.6;
+      lamp.bulbMat.emissiveIntensity = 0.04 + lamp.p * 1.32 * breath + flash * 0.8;
+      lamp.haloMat.opacity = Math.min(1, lamp.p * 0.62 * breath + flash * 0.35);
+      const s = 0.2 + lamp.p * 0.2 + flash * 0.12;
+      lamp.halo.scale.set(s, s, 1);
+    };
+
     const tick = () => {
       const dt = clock.getDelta();
       const now = performance.now();
       acc += dt;
+
+      // 灯：被点亮的那盏从暗到亮，其余保持熄灭
+      const nowSec = now / 1000;
+      lampsRef.current.forEach((lamp) => {
+        const target = lamp.lit ? 1 : 0;
+        if (lamp.flash > 0) lamp.flash = Math.max(0, lamp.flash - dt * 2.2);
+        const moving = Math.abs(lamp.p - target) > 0.001;
+        if (moving) {
+          lamp.p += (target - lamp.p) * Math.min(1, dt * 5.5);
+          if (Math.abs(lamp.p - target) <= 0.001) lamp.p = target;
+        }
+        if (moving || lamp.flash > 0 || lamp.p > 0) paintLamp(lamp, nowSec);
+      });
 
       if (targetingRef.current && targetQuatRef.current && globeRef.current) {
         globeRef.current.quaternion.slerp(targetQuatRef.current, Math.min(1, dt * 4.2));
@@ -357,7 +450,7 @@ export default function ClayGlobe({
         );
       }
 
-      // 新落钉：落下 → 回弹 → 稳住
+      // 新安放的灯：落下 → 回弹 → 稳住
       if (dropRef.current) {
         const { start, pin, ripple } = dropRef.current;
         const t = (now - start) / 1000;
@@ -365,13 +458,13 @@ export default function ClayGlobe({
           const bounce = Math.sin(t * 17) * Math.exp(-t * 5.2) * 0.42;
           const lift = t < 0.2 ? (0.2 - t) * 2.6 : 0;
           const dir = pin.position.clone().normalize();
-          pin.position.copy(dir.multiplyScalar(R + 0.045 + Math.max(0, bounce) + lift));
+          pin.position.copy(dir.multiplyScalar(LAMP_AT + Math.max(0, bounce) + lift));
         } else {
-          pin.position.copy(pin.position.clone().normalize().multiplyScalar(R + 0.045));
+          pin.position.copy(pin.position.clone().normalize().multiplyScalar(LAMP_AT));
           dropRef.current = null;
         }
 
-        // 把钉子投影到屏幕上，"啪！"就能正正打在图钉落点上
+        // 把灯投影到屏幕上，"啪！"就能正正打在小灯上
         if (onAnchorRef.current) {
           const world = new THREE.Vector3();
           pin.getWorldPosition(world);
@@ -438,67 +531,137 @@ export default function ClayGlobe({
     targetingRef.current = true;
   }, [activeTargetCoord]);
 
-  /* ---------------- 图钉 ---------------- */
+  /* ---------------- 球面上的小灯 ---------------- */
   useEffect(() => {
     const group = pinsRef.current;
     const ripples = ripplesRef.current;
     if (!group || !ripples) return;
 
-    // 清空旧图钉
+    // 清空旧灯（连同几何与材质，别让每点亮一次就漏一批）
     while (group.children.length) {
       const child = group.children[0];
       child.traverse((o) => {
         const m = o as THREE.Mesh;
         if (m.geometry) m.geometry.dispose();
+        const material = (m as THREE.Mesh).material;
+        if (Array.isArray(material)) material.forEach((x) => x.dispose());
+        else material?.dispose();
       });
       group.remove(child);
     }
+    lampsRef.current.clear();
+
     while (ripples.children.length) {
       const child = ripples.children[0] as THREE.Mesh;
       child.geometry?.dispose();
+      (child.material as THREE.Material | undefined)?.dispose?.();
       ripples.remove(child);
     }
 
-    const headMat = (color: number) =>
-      new THREE.MeshStandardMaterial({ color, roughness: 0.86, metalness: 0.03 });
+    const glassTexture = getGlowTexture();
 
     pins.forEach((pin, i) => {
       const isNew = pin.id === newlyDroppedPinId;
-      const at = latLonToVector3(pin.lat, pin.lon, R + 0.045);
+      const lit = litRef.current.has(pin.id);
+
+      // 灯座贴在球面上，灯的 +z 就是球面法线，所以各部件沿 z 依次排上去
+      const at = latLonToVector3(pin.lat, pin.lon, LAMP_AT);
       const node = new THREE.Group();
       node.position.copy(at);
       node.lookAt(at.clone().multiplyScalar(2));
       node.userData.pin = pin;
 
-      const palette = [0xf2e7cb, 0x8fae5e, 0xa8d4ba];
-      const color = pin.role === 'TEACHER' ? 0xd4796f : palette[i % 3];
+      const baseColor =
+        pin.role === 'TEACHER' ? LAMP_BASE_TEACHER : LAMP_BASE_COLORS[i % LAMP_BASE_COLORS.length];
+      const baseMat = new THREE.MeshStandardMaterial({
+        color: baseColor,
+        roughness: 0.82,
+        metalness: 0.04,
+      });
+      // 灯圈用黄铜，跟泥做的灯托拉开材质，小灯才有一圈"金属灯口"的高光
+      const rimMat = new THREE.MeshStandardMaterial({
+        color: 0xc9a76a,
+        roughness: 0.34,
+        metalness: 0.55,
+      });
 
-      const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.105, 2), headMat(color));
-      head.position.z = 0.115;
-      head.userData.pin = pin;
-      node.add(head);
+      /*
+       * 小灯的造型：一圈黄铜灯圈 + 嵌在圈里的一颗玻璃灯珠。
+       *
+       * 这个尺寸下试了三版：细杆顶灯珠（杆沿球面法线，正对镜头时整根杆被灯珠
+       * 挡住，只剩一颗悬空的珠子）、灯罩（糊成一个小土丘）、灯珠扣半球。
+       * 最后落在这版：所有部件都贴在球面的切平面里，任何角度看都是
+       * "一圈铜 + 一颗珠"，点亮时整颗珠透出暖光 —— 十来个像素里最稳的读法。
+       */
+      // 灯托：一道角色色的泥边，老师豆沙 / 学生按序轮换，和图钉时代的分色一脉相承
+      const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.066, 0.014, 28), baseMat);
+      seat.rotation.x = Math.PI / 2;
+      seat.position.z = 0.007;
+      seat.userData.pin = pin;
+      node.add(seat);
 
-      const needle = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.014, 0.005, 0.14, 8),
-        new THREE.MeshStandardMaterial({ color: 0x6f5a44, roughness: 0.8 })
+      // 灯圈：黄铜，压在灯托上，像一枚小小的灯口
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.0095, 12, 32), rimMat);
+      ring.position.z = 0.013;
+      ring.userData.pin = pin;
+      node.add(ring);
+
+      // 灯珠：半球玻璃罩，扣在圈里，球面就是灯口
+      const bulbMat = new THREE.MeshStandardMaterial({
+        color: LAMP_GLASS,
+        roughness: 0.36,
+        metalness: 0,
+        emissive: LAMP_EMISSIVE,
+        emissiveIntensity: 0.04,
+      });
+      const bulbGeo = new THREE.SphereGeometry(0.05, 28, 18, 0, Math.PI * 2, 0, Math.PI / 2);
+      bulbGeo.rotateX(Math.PI / 2); // 上半球朝 +z（球面法线）
+      bulbGeo.scale(1, 1, 1.22); // 灯珠凸出来一点，才有"一颗灯"的体积
+      const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+      bulb.position.z = 0.006;
+      bulb.userData.pin = pin;
+      node.add(bulb);
+
+      // 光晕：始终面向相机的加法贴图。熄灭时完全透明，亮起点开一圈暖光
+      const haloMat = new THREE.SpriteMaterial({
+        map: glassTexture,
+        color: 0xffcb8c,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      const halo = new THREE.Sprite(haloMat);
+      halo.position.z = 0.055;
+      halo.scale.set(0.2, 0.2, 1);
+      halo.userData.pin = pin;
+      node.add(halo);
+
+      // 拾取用的透明球：灯比原来的图钉小，给它一层看不见的"手感范围"
+      const hit = new THREE.Mesh(
+        new THREE.SphereGeometry(0.075, 10, 8),
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
       );
-      needle.rotation.x = Math.PI / 2;
-      needle.position.z = 0.05;
-      needle.userData.pin = pin;
-      node.add(needle);
-
-      const pad = new THREE.Mesh(
-        new THREE.SphereGeometry(0.045, 12, 12),
-        new THREE.MeshStandardMaterial({ color: 0xe8d9b2, roughness: 0.9 })
-      );
-      pad.scale.set(1.5, 1.5, 0.45);
-      pad.userData.pin = pin;
-      node.add(pad);
+      hit.position.z = 0.03;
+      hit.userData.pin = pin;
+      node.add(hit);
 
       group.add(node);
 
+      const handle: LampHandle = {
+        bulbMat,
+        haloMat,
+        halo,
+        phase: i * 1.7,
+        lit,
+        p: lit ? 1 : 0,
+        flash: 0,
+      };
+      lampsRef.current.set(pin.id, handle);
+      paintInitialLamp(handle);
+
       if (isNew) {
-        const ring = new THREE.Mesh(
+        const rippleRing = new THREE.Mesh(
           new THREE.RingGeometry(0.075, 0.17, 32),
           new THREE.MeshBasicMaterial({
             color: 0xffe3a8,
@@ -507,16 +670,33 @@ export default function ClayGlobe({
             side: THREE.DoubleSide,
           })
         );
-        ring.position.copy(at);
-        ring.lookAt(at.clone().multiplyScalar(2));
-        ripples.add(ring);
-        dropRef.current = { start: performance.now(), pin: node, ripple: ring };
+        rippleRing.position.copy(latLonToVector3(pin.lat, pin.lon, R + 0.02));
+        rippleRing.lookAt(at.clone().multiplyScalar(2));
+        ripples.add(rippleRing);
+        dropRef.current = { start: performance.now(), pin: node, ripple: rippleRing };
       }
     });
   }, [pins, newlyDroppedPinId]);
 
+  /* ---------------- 点亮 / 熄灭：只改状态，动画交给渲染循环 ---------------- */
+  useEffect(() => {
+    lampsRef.current.forEach((lamp, id) => {
+      const on = litPinIds.has(id);
+      if (on === lamp.lit) return;
+      lamp.lit = on;
+      // 刚被点亮：给一下过曝，灯"啪"地亮起来才有反应
+      if (on) lamp.flash = 1;
+    });
+  }, [litPinIds]);
+
   return failed ? (
-    <GlobeFallback pins={pins} size={size} zoomed={zoomed} onToggleZoom={onToggleZoom} />
+    <GlobeFallback
+      pins={pins}
+      size={size}
+      zoomed={zoomed}
+      litPinIds={litPinIds}
+      onToggleZoom={onToggleZoom}
+    />
   ) : (
     <div ref={mountRef} style={{ width: size, height: size }} />
   );

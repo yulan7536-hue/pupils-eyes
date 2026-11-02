@@ -23,6 +23,8 @@ const SCENE_LAYERS = {
 interface MainLawnProps {
   pins: PinItem[];
   works: WorkItem[];
+  /** 已被点亮的成果 id，球面上对应的那盏小灯会亮 */
+  litPinIds: Set<string>;
   globeOpen: boolean;
   /** 地球仪放大时是否显示"回到课桌"的关闭按钮（有弹窗时让位给弹窗） */
   globeChrome: boolean;
@@ -116,6 +118,7 @@ function Tuft({ h }: { h: number }) {
 export default function MainLawn({
   pins,
   works,
+  litPinIds,
   globeOpen,
   globeChrome,
   onToggleGlobe,
@@ -364,6 +367,7 @@ export default function MainLawn({
           <ClayGlobe
             pins={pins}
             size={globeSize}
+            litPinIds={litPinIds}
             zoomed={globeOpen}
             activeTargetCoord={activeTargetCoord}
             newlyDroppedPinId={newlyDroppedPinId}
@@ -376,7 +380,12 @@ export default function MainLawn({
 
         {hover && (
           <div className="pin-tip" style={{ left: hover.x, top: hover.y - 14 }} role="status">
+            <span
+              className={`pin-tip__dot${litPinIds.has(hover.pin.id) ? ' is-lit' : ''}`}
+              aria-hidden="true"
+            />
             童眼看 {hover.pin.city.split('·').pop()}
+            {litPinIds.has(hover.pin.id) && <span className="pin-tip__lit">灯已亮</span>}
           </div>
         )}
       </>,

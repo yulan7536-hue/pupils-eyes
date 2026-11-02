@@ -116,11 +116,19 @@ export default function WorkSheet({ work, onClose, onLike, onComment }: WorkShee
             background: 'var(--paper-2)',
           }}
         >
-          <span className="tnum" style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
-            已有 {work.likes} 人点亮
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+            <span className="tnum" style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+              已有 {work.likes} 人点亮
+            </span>
+            {work.lit && <span className="sheet__lit-note">· 地球仪上那盏小灯已亮</span>}
           </span>
-          <button type="button" className="btn btn--rose" onClick={() => onLike(work.id)}>
-            点亮这份成果
+          <button
+            type="button"
+            className={work.lit ? 'btn btn--lit' : 'btn btn--rose'}
+            onClick={() => onLike(work.id)}
+            disabled={work.lit}
+          >
+            {work.lit ? '灯已亮起' : '点亮这份成果'}
           </button>
         </div>
       </article>
