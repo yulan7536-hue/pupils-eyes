@@ -5288,15 +5288,18 @@ textarea.input {
    ============================================================ */
 
 /* 顶部紫藤感应区：鼠标进入时给紫藤层加一记力。
-   要压在紫藤层（z 30）之上才收得到 hover，但只占上沿 24%，
-   不会挡住下方的建筑热区。 */
+   它只需要"被扫到"，不吃点击，所以层级要压在 HUD（z 30）**之下**：
+   紫藤层本身是 pointer-events: none，不参与命中测试，没必要压过它。
+   之前写 35 压过了 HUD，右上角「上传课题 / 感官工作台」整块落在这条
+   24% 高的带子里，点击全被这层收走 —— 按钮看着在，就是点不动。
+   HUD 只有按钮是 pointer-events: auto，空白处会穿透回这一层，hover 照旧。 */
 .wisteria-hover-zone {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   height: 24%;
-  z-index: 35;
+  z-index: 25;
   pointer-events: auto;
 }
 
