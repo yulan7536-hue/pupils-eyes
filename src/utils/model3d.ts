@@ -1,10 +1,12 @@
 /**
  * 图生 3D：照片 → glb 模型（豆包 Seed3D 2.0）。
  *
- * 链路（官方异步任务接口）：
- *   1. POST /api/v3/contents/generations/tasks 创建任务（图片走 base64 data URL）
- *   2. 每 5s GET /tasks/{id} 轮询，succeeded 后拿 content.file_url
+ * 链路（官方异步任务接口，全部走同源代理 /ark-proxy，见 vite.config.ts）：
+ *   1. POST /ark-proxy/task 创建任务（图片走 base64 data URL）
+ *   2. 每 5s GET /ark-proxy/task?id={id} 轮询，succeeded 后拿 content.file_url
  *   3. 下载的是 zip（内部结构 pbr/mesh_textured_pbr.glb），用 fflate 解压取出 glb
+ *
+ * 为什么走代理：方舟接口没有 CORS 头，浏览器直连必 Failed to fetch。
  *
  * 几个实测/文档确认的坑：
  *  - 文本部分不是提示词，只能传参数（`--subdivisionlevel low --fileformat glb`）
@@ -16,7 +18,6 @@
 import { unzipSync } from 'fflate';
 import { getDoubaoKey } from './stickerAI';
 
-const ARK_TASK_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks';
 const SEED3D_MODEL = 'doubao-seed3d-2-0-260328';
 /** 轮询间隔（文档建议别太猛，3D 生成本身要几分钟） */
 const POLL_INTERVAL = 5000;
@@ -109,7 +110,8 @@ async function toDataUrl(file: File, maxEdge = 1024): Promise<string> {
 /* ---------------- 任务接口 ---------------- */
 
 async function createTask(dataUrl: string, key: string): Promise<string> {
-  const res = await fetch(ARK_TASK_ENDPOINT, {
+  // 方舟接口没有 CORS 头，直连必 Failed to fetch，必须走同源代理 /ark-proxy/task
+  const res = await fetch('/ark-proxy/task', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -152,7 +154,7 @@ interface TaskStatus {
 }
 
 async function queryTask(id: string, key: string): Promise<TaskStatus> {
-  const res = await fetch(`${ARK_TASK_ENDPOINT}/${id}`, {
+  const res = await fetch(`/ark-proxy/task?id=${encodeURIComponent(id)}`, {
     headers: { Authorization: `Bearer ${key}` },
   });
   const txt = await res.text().catch(() => '');

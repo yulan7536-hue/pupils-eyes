@@ -19,6 +19,8 @@ import type {IncomingMessage, ServerResponse} from 'node:http';
 const PROXY_PATH = '/ark-proxy';
 /** 生图接口地址固定，直接写死，不走 url 参数（见下） */
 const ARK_GENERATE_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/images/generations';
+/** Seed3D 任务接口（创建 / 查询） */
+const ARK_TASK_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks';
 const ALLOWED_HOSTS = [
   /(^|\.)tos-cn-beijing\.volces\.com$/i,
   /^ark\.cn-beijing\.volces\.com$/i,
@@ -42,6 +44,10 @@ function arkProxy(): Plugin {
     // 永远到不了这里、只能 fallback 到 Gemini。把目标从 query 挪到路径即可绕过。
     if (reqUrl.pathname === `${PROXY_PATH}/generate`) {
       target = ARK_GENERATE_ENDPOINT;
+    } else if (reqUrl.pathname === `${PROXY_PATH}/task`) {
+      // Seed3D 任务：POST 创建（无 id）/ GET 查询（?id=xxx）
+      const taskId = reqUrl.searchParams.get('id') ?? '';
+      target = taskId ? `${ARK_TASK_ENDPOINT}/${taskId}` : ARK_TASK_ENDPOINT;
     }
 
     let parsed: URL;
