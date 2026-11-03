@@ -48,10 +48,42 @@ function arkProxy(): Plugin {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 90_000);
     try {
-      const upstream = await fetch(parsed.toString(), { signal: ac.signal });
+      // 转发 method / body：豆包的生图接口是 POST，而且浏览器直连会被 CORS 拦
+      const method = (req.method ?? 'GET').toUpperCase();
+      let body: Buffer | undefined;
+      if (method !== 'GET' && method !== 'HEAD') {
+        const chunks: Buffer[] = [];
+        let total = 0;
+        for await (const chunk of req) {
+          total += (chunk as Buffer).length;
+          if (total > MAX_BYTES) {
+            res.statusCode = 413;
+            res.end('too large');
+            return;
+          }
+          chunks.push(chunk as Buffer);
+        }
+        body = Buffer.concat(chunks);
+      }
+
+      const headers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(req.headers)) {
+        if (!v || ['host', 'content-length', 'connection', 'origin', 'referer'].includes(k)) continue;
+        headers[k] = Array.isArray(v) ? v.join(',') : v;
+      }
+
+      const upstream = await fetch(parsed.toString(), {
+        method,
+        headers,
+        body: method === 'GET' || method === 'HEAD' || !body ? undefined : new Uint8Array(body),
+        signal: ac.signal,
+      });
       if (!upstream.ok) {
         res.statusCode = upstream.status;
-        res.end(`upstream ${upstream.status}`);
+        // 把上游的错误体透传回去，前端才能看清是欠费还是参数错
+        const text = await upstream.text().catch(() => '');
+        res.setHeader('Content-Type', 'application/json');
+        res.end(text || `upstream ${upstream.status}`);
         return;
       }
       const len = upstream.headers.get('content-length');

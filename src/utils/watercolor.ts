@@ -467,7 +467,9 @@ function applyInk(px: Uint8ClampedArray, edge: Float32Array, inkStrength: number
 
     // 2) 墨线：只在强边缘落笔，浓度平滑过渡，避免锯齿
     if (e > t2) {
-      const a = Math.min(1, (e - t2) / Math.max(1e-4, 1 - t2)) * inkStrength * 0.9;
+      // 下限 0.5：手绘线条是实笔，不是淡影；只有最弱的边缘才递减
+      const norm = Math.min(1, (e - t2) / Math.max(1e-4, 1 - t2));
+      const a = (0.5 + 0.5 * norm) * inkStrength;
       if (a > 0.01) {
         px[i] = px[i] * (1 - a) + INK_RGB[0] * a;
         px[i + 1] = px[i + 1] * (1 - a) + INK_RGB[1] * a;

@@ -289,6 +289,14 @@ export async function paintSticker(
   return finalizeSticker(painted.toDataURL('image/png'));
 }
 
+/**
+ * 把任意一张（AI 重绘得到的）图收尾成贴纸：裁透明边 → 缩 512 → webp。
+ * 给 AI 通道用，本地通道内部直接调 finalizeSticker。
+ */
+export async function finalizeExternal(dataUrl: string): Promise<string> {
+  return finalizeSticker(dataUrl);
+}
+
 /** 预览里没确认就关掉时，把中间产物释放掉，避免内存里堆一堆 dataURL */
 export function disposePrepared(prepared: PreparedPhoto | null): void {
   if (!prepared) return;
