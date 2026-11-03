@@ -1,9 +1,9 @@
 /**
  * 图生 3D：照片 → glb 模型（豆包 Seed3D 2.0）。
  *
- * 链路（官方异步任务接口，全部走同源代理 /ark-proxy，见 vite.config.ts）：
- *   1. POST /ark-proxy/task 创建任务（图片走 base64 data URL）
- *   2. 每 5s GET /ark-proxy/task?id={id} 轮询，succeeded 后拿 content.file_url
+ * 链路（官方异步任务接口，全部走同源 /task、/download，见 vite.config.ts 与 server.js）：
+ *   1. POST /task 创建任务（图片走 base64 data URL）
+ *   2. 每 5s GET /task?id={id} 轮询，succeeded 后拿 content.file_url
  *   3. 下载的是 zip（内部结构 pbr/mesh_textured_pbr.glb），用 fflate 解压取出 glb
  *
  * 为什么走代理：方舟接口没有 CORS 头，浏览器直连必 Failed to fetch。
@@ -110,8 +110,8 @@ async function toDataUrl(file: File, maxEdge = 1024): Promise<string> {
 /* ---------------- 任务接口 ---------------- */
 
 async function createTask(dataUrl: string, key: string): Promise<string> {
-  // 方舟接口没有 CORS 头，直连必 Failed to fetch，必须走同源代理 /ark-proxy/task
-  const res = await fetch('/ark-proxy/task', {
+  // 方舟接口没有 CORS 头，直连必 Failed to fetch，走同源 /task（dev 中间件 / 线上 server.js）
+  const res = await fetch('/task', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -154,7 +154,7 @@ interface TaskStatus {
 }
 
 async function queryTask(id: string, key: string): Promise<TaskStatus> {
-  const res = await fetch(`/ark-proxy/task?id=${encodeURIComponent(id)}`, {
+  const res = await fetch(`/task?id=${encodeURIComponent(id)}`, {
     headers: { Authorization: `Bearer ${key}` },
   });
   const txt = await res.text().catch(() => '');
@@ -175,7 +175,7 @@ async function queryTask(id: string, key: string): Promise<TaskStatus> {
 
 /**
  * 下载字节流。
- * 优先走同源代理 /ark-proxy（见 vite.config.ts 的 arkProxy）：
+ * 优先走同源代理 /download?url=<encoded>（dev 中间件 / 线上 server.js）：
  * 模型 zip 在火山 TOS 桶上，桶没配 CORS 头，浏览器直连会被拦成 `Failed to fetch`
  * （Chrome 报 MissingAllowOriginHeader），这是线上「3D 上传失败」的真正原因。
  * 代理不可用（例如纯静态托管）时退回直连，并给出可读的失败原因。
@@ -183,7 +183,7 @@ async function queryTask(id: string, key: string): Promise<TaskStatus> {
 async function downloadBytes(url: string): Promise<ArrayBuffer> {
   let note = '';
   try {
-    const viaProxy = await fetch(`/ark-proxy?url=${encodeURIComponent(url)}`);
+    const viaProxy = await fetch(`/download?url=${encodeURIComponent(url)}`);
     if (viaProxy.ok) return await viaProxy.arrayBuffer();
     note = `（代理返回 ${viaProxy.status}）`;
   } catch {

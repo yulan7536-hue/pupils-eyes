@@ -5,19 +5,15 @@ import {defineConfig, type Plugin} from 'vite';
 import type {IncomingMessage, ServerResponse} from 'node:http';
 
 /**
- * 豆包 Seed3D 生成完成后，模型 zip 放在火山 TOS 桶上，桶没有配 CORS 头，
- * 浏览器直连会报 `MissingAllowOriginHeader`（Failed to fetch），
- * 于是「照片变 3D 摆件」在生成 3-5 分钟后才失败。
+ * 豆包 / 火山方舟转发代理（本地开发用）。
  *
- * 这里挂一个同源代理把它绕过去：/ark-proxy?url=<encoded>
- * - dev（configureServer）与 preview（configurePreviewServer）都生效，
- *   线上部署跑的正是 `vite preview`，所以不用额外起后端服务。
- * - 只放行火山方舟相关域名，避免变成任意 URL 的开放代理（SSRF）。
- * - 路径特意不用 /api 前缀：部署平台的网关会抢占 /api/*，任何请求都返回
- *   `Unsupported zti authentication method`，根本到不了这个中间件。
+ * 火山方舟所有接口（图生图 / Seed3D / TOS 下载）都没有 CORS 头，浏览器无法直连，
+ * 所以在 dev server 上挂同源代理。线上部署改用 server.js（express 一体服务），
+ * 路径与这里保持一致：/generate、/task、/download。
+ *
+ * 只放行火山方舟相关域名，避免变成任意 URL 的开放代理（SSRF）。
  */
-const PROXY_PATH = '/ark-proxy';
-/** 生图接口地址固定，直接写死，不走 url 参数（见下） */
+/** 生图接口地址固定，直接写死，不走 url 参数 */
 const ARK_GENERATE_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/images/generations';
 /** Seed3D 任务接口（创建 / 查询） */
 const ARK_TASK_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks';
@@ -27,6 +23,8 @@ const ALLOWED_HOSTS = [
 ];
 /** 模型 zip 约 16MB，留足余量但不无限 */
 const MAX_BYTES = 120 * 1024 * 1024;
+/** 本代理响应的路径 */
+const API_PATHS = ['/generate', '/task', '/download'];
 
 function arkProxy(): Plugin {
   const handler = async (
@@ -34,20 +32,18 @@ function arkProxy(): Plugin {
     res: ServerResponse,
     next: (err?: unknown) => void
   ) => {
-    if (!req.url?.startsWith(PROXY_PATH)) return next();
+    const reqUrl = new URL(req.url ?? '/', 'http://localhost');
+    if (!API_PATHS.includes(reqUrl.pathname)) return next();
 
-    const reqUrl = new URL(req.url, 'http://localhost');
-    let target = reqUrl.searchParams.get('url') ?? '';
-    // 生图 endpoint 固定，用路径 /ark-proxy/generate 表达，不带 url 参数。
-    // 线上部署平台的网关会拦截「query 里带外部 https URL」的代理请求
-    // （返回 `Unsupported zti authentication method`），导致豆包图生图在线上
-    // 永远到不了这里、只能 fallback 到 Gemini。把目标从 query 挪到路径即可绕过。
-    if (reqUrl.pathname === `${PROXY_PATH}/generate`) {
+    let target = '';
+    if (reqUrl.pathname === '/generate') {
       target = ARK_GENERATE_ENDPOINT;
-    } else if (reqUrl.pathname === `${PROXY_PATH}/task`) {
+    } else if (reqUrl.pathname === '/task') {
       // Seed3D 任务：POST 创建（无 id）/ GET 查询（?id=xxx）
       const taskId = reqUrl.searchParams.get('id') ?? '';
       target = taskId ? `${ARK_TASK_ENDPOINT}/${taskId}` : ARK_TASK_ENDPOINT;
+    } else if (reqUrl.pathname === '/download') {
+      target = reqUrl.searchParams.get('url') ?? '';
     }
 
     let parsed: URL;

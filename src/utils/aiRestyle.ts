@@ -141,12 +141,12 @@ async function viaDoubao(imageDataUrl: string, prompt: string): Promise<string> 
 
   /**
    * 方舟的接口没有给浏览器放 CORS 头，直连必报 Failed to fetch。
-   * 优先走同源的 /ark-proxy/generate（dev 与 preview 都挂了），
+   * 优先走同源 /generate（dev 用 vite 中间件，线上用 server.js），
    * 静态托管（GitHub Pages）没有这个后端，会 404，那就退回直连。
    */
   let res: Response | null = null;
   try {
-    const proxied = await fetch(`/ark-proxy/generate`, {
+    const proxied = await fetch(`/generate`, {
       method: 'POST',
       headers,
       body: payload,
