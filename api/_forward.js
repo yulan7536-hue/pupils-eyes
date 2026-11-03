@@ -14,6 +14,12 @@ const ALLOWED_HOSTS = [
 ];
 
 /**
+ * 豆包 Key 只在服务端（Vercel 环境变量 DOUBAO_API_KEY）。
+ * 不要用 VITE_ 前缀，那样会被打进前端 bundle 公开。
+ */
+const SERVER_KEY = (process.env.DOUBAO_API_KEY || process.env.VITE_DOUBAO_API_KEY || '').trim();
+
+/**
  * 把请求转发到火山方舟。
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse} res
@@ -39,6 +45,11 @@ export function forward(req, res, target, body) {
     for (const [k, v] of Object.entries(req.headers)) {
       if (!v || ['host', 'connection', 'content-length', 'transfer-encoding'].includes(k.toLowerCase())) continue;
       fwd[k] = v;
+    }
+
+    // 服务端配了 Key 就一律用它，忽略前端传来的
+    if (SERVER_KEY && /^ark\.cn-beijing\.volces\.com$/i.test(parsed.hostname)) {
+      fwd.authorization = `Bearer ${SERVER_KEY}`;
     }
 
     const upstream = https.request(

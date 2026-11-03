@@ -12,11 +12,40 @@
  */
 
 import express from 'express';
+import fs from 'fs';
 import https from 'https';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * 读同目录的 .env（部署脚本写的）。
+ *
+ * 不引 dotenv：就十几行，少一个依赖少一处构建风险。
+ * 已经存在的环境变量优先，方便用 pm2 / systemd 覆盖。
+ */
+function loadDotEnv() {
+  try {
+    const txt = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
+    for (const raw of txt.split('\n')) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      const eq = line.indexOf('=');
+      if (eq < 1) continue;
+      const k = line.slice(0, eq).trim();
+      let v = line.slice(eq + 1).trim();
+      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+        v = v.slice(1, -1);
+      }
+      if (process.env[k] === undefined) process.env[k] = v;
+    }
+  } catch {
+    /* 没有 .env 就只用真实环境变量 */
+  }
+}
+loadDotEnv();
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -25,6 +54,15 @@ const ALLOWED_HOSTS = [
   /(^|\.)tos-cn-beijing\.volces\.com$/i,
   /^ark\.cn-beijing\.volces\.com$/i,
 ];
+
+/**
+ * 豆包 Key 只在服务端。
+ *
+ * 绝不能写成 VITE_ 前缀：那样会被 vite 打进前端 bundle，任何人按 F12
+ * 都能拿到 Key 去刷额度。部署时用环境变量 DOUBAO_API_KEY 传进来
+ * （setup-server.sh 会写进 .env，pm2 读）。
+ */
+const SERVER_KEY = (process.env.DOUBAO_API_KEY || process.env.VITE_DOUBAO_API_KEY || '').trim();
 
 /** 校验并转发一个请求到火山方舟（只放行白名单域名，防 SSRF） */
 function proxyTo(req, res, target) {
@@ -42,6 +80,11 @@ function proxyTo(req, res, target) {
   for (const [k, v] of Object.entries(req.headers)) {
     if (!v || ['host', 'connection', 'content-length', 'transfer-encoding'].includes(k.toLowerCase())) continue;
     fwd[k] = v;
+  }
+
+  // 服务端配了 Key 就一律用它，忽略前端传来的（防止被抓包后换成别人的 Key）
+  if (SERVER_KEY && /^ark\.cn-beijing\.volces\.com$/i.test(parsed.hostname)) {
+    fwd.authorization = `Bearer ${SERVER_KEY}`;
   }
 
   const upstream = https.request(
@@ -63,6 +106,12 @@ function proxyTo(req, res, target) {
 
 /* ---------------- 豆包转发 API ---------------- */
 
+// 前端启动时问一次：服务端有没有配 Key，决定要不要走 AI 重绘
+app.get('/ai-status', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ configured: Boolean(SERVER_KEY) });
+});
+
 // 图生图（Seedream）
 app.post('/generate', (req, res) => proxyTo(req, res, `${ARK_BASE}/api/v3/images/generations`));
 // Seed3D：创建任务
@@ -82,4 +131,5 @@ app.get('*', (req, res) => res.sendFile(path.join(dist, 'index.html')));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[pupils-eyes] listening on 0.0.0.0:${PORT}`);
+  console.log(`[pupils-eyes] 豆包 Key: ${SERVER_KEY ? '已配置（服务端持有）' : '未配置 —— AI 重绘会被跳过'}`);
 });

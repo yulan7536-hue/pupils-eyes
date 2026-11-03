@@ -16,7 +16,7 @@
 
 import { aiCutout } from './rembg';
 import { watercolorize, type WatercolorOptions } from './watercolor';
-import { aiRestyle } from './aiRestyle';
+import { aiRestyle, hasServerAi } from './aiRestyle';
 
 const DOUBAO_KEY_LOCAL = 'pupils-eyes:doubao-key';
 
@@ -275,7 +275,7 @@ export async function prepareSticker(
   let aiImage: string | undefined;
   let aiNote = '';
 
-  if (hasDoubaoKey()) {
+  if (hasDoubaoKey() || (await hasServerAi())) {
     report(68, 'AI 正在画一版插画（约 20 秒）');
     try {
       const { dataUrl: painted } = await aiRestyle(dataUrl);

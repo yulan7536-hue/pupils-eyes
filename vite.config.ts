@@ -5,7 +5,7 @@ import dns from 'node:dns';
 import net from 'node:net';
 import https from 'node:https';
 import {Agent, fetch as undiciFetch} from 'undici';
-import {defineConfig, type Plugin} from 'vite';
+import {defineConfig, loadEnv, type Plugin} from 'vite';
 import type {IncomingMessage, ServerResponse} from 'node:http';
 
 /**
@@ -119,13 +119,23 @@ const arkAgent = new Agent({
   },
 });
 
-function arkProxy(): Plugin {
+function arkProxy(serverKey: string): Plugin {
   const handler = async (
     req: IncomingMessage,
     res: ServerResponse,
     next: (err?: unknown) => void
   ) => {
     const reqUrl = new URL(req.url ?? '/', 'http://localhost');
+
+    // 前端问「服务端有没有配 Key」——和 server.js 的 /ai-status 保持一致
+    if (reqUrl.pathname === '/ai-status') {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(JSON.stringify({ configured: Boolean(serverKey) }));
+      return;
+    }
+
     if (!API_PATHS.includes(reqUrl.pathname)) return next();
 
     let target = '';
@@ -178,6 +188,10 @@ function arkProxy(): Plugin {
       for (const [k, v] of Object.entries(req.headers)) {
         if (!v || ['host', 'content-length', 'connection', 'origin', 'referer'].includes(k)) continue;
         headers[k] = Array.isArray(v) ? v.join(',') : v;
+      }
+      // 与服务端一致：配了 Key 就用服务端的，前端不必也不该持有
+      if (serverKey && /^ark\.cn-beijing\.volces\.com$/i.test(parsed.hostname)) {
+        headers.authorization = `Bearer ${serverKey}`;
       }
 
       const upstream = await undiciFetch(parsed.toString(), {
@@ -247,7 +261,14 @@ function dropOrtJsepWasm(): Plugin {
   };
 }
 
-export default defineConfig(({ command }) => {
+export default defineConfig(({ command, mode }) => {
+  /**
+   * 豆包 Key 从 .env.local 读，只交给 dev 中间件，不进 bundle。
+   * （VITE_ 前缀的变量会被注入 import.meta.env，等于公开，所以优先用
+   *   DOUBAO_API_KEY，VITE_ 那个只作兼容旧配置。）
+   */
+  const env = loadEnv(mode, process.cwd(), '');
+  const serverKey = (env.DOUBAO_API_KEY || env.VITE_DOUBAO_API_KEY || '').trim();
   /**
    * 同一份 dist 要能挂在两种地方：
    * - GitHub Pages 项目站点，前缀 /pupils-eyes/
@@ -260,7 +281,7 @@ export default defineConfig(({ command }) => {
 
   return {
     base,
-    plugins: [react(), tailwindcss(), arkProxy(), dropOrtJsepWasm()],
+    plugins: [react(), tailwindcss(), arkProxy(serverKey), dropOrtJsepWasm()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

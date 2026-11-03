@@ -35,8 +35,14 @@ export interface AiRestyleResult {
   dataUrl: string;
 }
 
+/**
+ * 浏览器端手里的 Key —— 正常情况下是空的。
+ *
+ * 线上把 Key 打进前端 JS 等于公开：任何人按 F12 就能拿走刷你的额度。
+ * 所以正式部署一律由服务端持有（server.js 读 DOUBAO_API_KEY 注入），
+ * 这里只保留两条本地通道：用户自己在页面里填的，以及开发的 .env.local。
+ */
 function doubaoKey(): string {
-  const env = (import.meta.env as unknown as Record<string, string | undefined>).VITE_DOUBAO_API_KEY;
   if (typeof window !== 'undefined') {
     try {
       const local = window.localStorage.getItem('pupils-eyes:doubao-key');
@@ -45,17 +51,38 @@ function doubaoKey(): string {
       /* 隐私模式下读不到，忽略 */
     }
   }
+  const env = (import.meta.env as unknown as Record<string, string | undefined>).VITE_DOUBAO_API_KEY;
   return (env ?? '').trim();
 }
 
-/** 有没有配置豆包 Key（真实可用性要调用才知道） */
+/** 浏览器端有没有能直接用的 Key */
 export function hasDoubaoKey(): boolean {
   return Boolean(doubaoKey());
 }
 
+/**
+ * 服务端有没有配 Key（问一次就缓存）。
+ *
+ * 线上 Key 只在服务器上，前端无从得知，必须问后端。
+ * 静态托管（GitHub Pages）没有这个接口，返回 false，AI 重绘自动跳过。
+ */
+let serverAiReady: boolean | null = null;
+
+export async function hasServerAi(): Promise<boolean> {
+  if (serverAiReady !== null) return serverAiReady;
+  try {
+    const res = await fetch('/ai-status', { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(String(res.status));
+    const json = (await res.json()) as { configured?: boolean };
+    serverAiReady = Boolean(json?.configured);
+  } catch {
+    serverAiReady = false;
+  }
+  return serverAiReady;
+}
+
 async function viaDoubao(imageDataUrl: string, prompt: string): Promise<string> {
   const key = doubaoKey();
-  if (!key) throw new Error('没有配置豆包 Key');
 
   const payload = JSON.stringify({
     model: DOUBAO_MODEL,
@@ -66,10 +93,9 @@ async function viaDoubao(imageDataUrl: string, prompt: string): Promise<string> 
     watermark: false,
     response_format: 'b64_json',
   });
-  const headers = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${key}`,
-  };
+  // 有 Key 就带上；没有则由服务端注入（线上正规姿势）
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (key) headers.Authorization = `Bearer ${key}`;
 
   /**
    * 方舟的接口没有给浏览器放 CORS 头，直连必报 Failed to fetch。

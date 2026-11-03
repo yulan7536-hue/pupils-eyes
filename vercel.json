@@ -4,6 +4,7 @@
   "outputDirectory": "dist",
   "regions": ["hkg1"],
   "rewrites": [
+    { "source": "/ai-status", "destination": "/api/ai-status" },
     { "source": "/generate", "destination": "/api/generate" },
     { "source": "/task", "destination": "/api/task" },
     { "source": "/download", "destination": "/api/download" },
