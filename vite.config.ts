@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import dns from 'node:dns';
+import net from 'node:net';
 import https from 'node:https';
 import {Agent, fetch as undiciFetch} from 'undici';
 import {defineConfig, type Plugin} from 'vite';
@@ -90,12 +91,30 @@ function resolveViaDoh(hostname: string): Promise<string | null> {
 const arkAgent = new Agent({
   connect: {
     lookup(hostname, options, callback) {
+      const cb = callback as (
+        err: NodeJS.ErrnoException | null,
+        address: string | { address: string; family: number }[],
+        family?: number
+      ) => void;
+
+      const fallback = () => dns.lookup(hostname, options, callback as never);
+
       void resolveViaDoh(hostname)
         .then((ip) => {
-          if (ip) callback(null, ip, 4);
-          else dns.lookup(hostname, options, callback);
+          // 只认合法 IPv4，DoH 偶发返回空/异常时立刻回退，别把坏值喂给 undici
+          if (!ip || !net.isIPv4(ip)) {
+            fallback();
+            return;
+          }
+          // undici 的 connect 会带 all:true —— 这时必须回数组，
+          // 否则它会拿字符串当列表，抛 ERR_INVALID_IP_ADDRESS: undefined
+          if ((options as { all?: boolean } | undefined)?.all) {
+            cb(null, [{address: ip, family: 4}]);
+          } else {
+            cb(null, ip, 4);
+          }
         })
-        .catch(() => dns.lookup(hostname, options, callback));
+        .catch(fallback);
     },
   },
 });
@@ -189,8 +208,11 @@ function arkProxy(): Plugin {
       res.setHeader('Cache-Control', 'no-store');
       res.end(buf);
     } catch (err) {
+      const e = err as Error & { cause?: { code?: string; message?: string } };
+      // 线上只报一句，本地把 cause 打全 —— 否则 "fetch failed" 等于没说
+      console.error('[ark-proxy]', e.message, e.cause?.code, e.cause?.message);
       res.statusCode = 502;
-      res.end(`proxy failed: ${(err as Error).message}`);
+      res.end(`proxy failed: ${e.message} | ${e.cause?.code ?? ''} ${e.cause?.message ?? ''}`);
     } finally {
       clearTimeout(timer);
     }
