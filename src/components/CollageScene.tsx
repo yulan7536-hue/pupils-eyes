@@ -742,6 +742,9 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
     try {
       const prepared = await prepareSticker(file, (pct, stage) => setAiProgress({ pct, stage }));
 
+      // AI 没画成（欠费 / 网络 / 没 Key）时说明一句，别让用户以为是本地效果
+      if (prepared.aiNote) showToast(prepared.aiNote);
+
       // 额度在抠图完成后即扣（本地也花了算力，与是否收藏无关）
       const nextQuota = quota - 1;
       setQuotaState(nextQuota);

@@ -16,6 +16,7 @@
 
 import { aiCutout } from './rembg';
 import { watercolorize, type WatercolorOptions } from './watercolor';
+import { aiRestyle, aiProviderReady, type AiProvider } from './aiRestyle';
 
 const DOUBAO_KEY_LOCAL = 'pupils-eyes:doubao-key';
 
@@ -67,6 +68,18 @@ function blobToDataUrl(blob: Blob): Promise<string> {
     fr.onerror = () => reject(new Error('读取文件失败'));
     fr.readAsDataURL(blob);
   });
+}
+
+/** dataURL → Blob（AI 返回的图要再过一次抠图，抠图接口只吃 Blob） */
+function dataUrlToBlob(dataUrl: string): Blob {
+  const comma = dataUrl.indexOf(',');
+  const head = comma >= 0 ? dataUrl.slice(0, comma) : '';
+  const body = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  const mime = /data:([^;]+)/.exec(head)?.[1] ?? 'image/png';
+  const bin = atob(body);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
 }
 
 /** 压缩到长边 maxLen 的 JPEG，同时返回原始像素尺寸 */
@@ -163,6 +176,10 @@ export interface PreparedPhoto {
   cutout: string;
   /** 抠图前的原图（dataURL，已压缩），「原色」模式直接用 */
   source: string;
+  /** AI 重绘并抠好的插画贴纸（失败时为 undefined） */
+  aiImage?: string;
+  /** AI 失败原因，用于给用户一句提示 */
+  aiNote?: string;
 }
 
 export type StickerStyle = 'watercolor' | 'original';
@@ -230,8 +247,10 @@ async function roundRectSticker(img: HTMLCanvasElement): Promise<HTMLCanvasEleme
 }
 
 /**
- * 第一步：抠图。
- * 慢（首次要下模型 + 推理），但只做一次，之后调风格不用重来。
+ * 第一步：抠图 + AI 重绘。
+ *
+ * 抠图慢（首次还要下模型），只做一次；AI 重绘也放在这一步，
+ * 这样预览面板里换风格仍然是本地重算，不用担心每次拖滑块都花钱。
  */
 export async function prepareSticker(
   file: File,
@@ -242,17 +261,39 @@ export async function prepareSticker(
   report(4, '读取照片');
   const { blob, dataUrl } = await compress(file, 1024);
 
-  report(12, '正在识别画面主体');
+  report(10, '正在识别画面主体');
   const cutBlob = await aiCutout(blob, ({ pct, label }) => {
-    // 抠图占 12–92 的区间
-    report(12 + pct * 78, label);
+    // 抠图占 10–65，后面要留给 AI 重绘
+    report(10 + pct * 55, label);
   });
-
-  report(94, '整理贴纸');
   const cutout = await blobToDataUrl(cutBlob);
 
-  report(100, '主体已分离');
-  return { cutout, source: dataUrl };
+  /**
+   * AI 重绘：模型真正"画"一遍，才有插画的分色线和色块。
+   * 失败（没 Key / 欠费 / 网络）不影响主流程，回落本地引擎。
+   */
+  let aiImage: string | undefined;
+  let aiNote = '';
+
+  const providers = (['doubao', 'gemini'] as AiProvider[]).filter(aiProviderReady);
+  if (providers.length) {
+    report(68, 'AI 正在画一版插画（约 20 秒）');
+    for (const provider of providers) {
+      try {
+        const { dataUrl: painted } = await aiRestyle(dataUrl, provider);
+        // AI 会给主体补上背景，再抠一次才是干净贴纸
+        report(88, '正在分离画好的主体');
+        const aiBlob = await aiCutout(dataUrlToBlob(painted));
+        aiImage = await blobToDataUrl(aiBlob);
+        break;
+      } catch (err) {
+        aiNote = (err as Error).message || 'AI 重绘失败';
+      }
+    }
+  }
+
+  report(100, aiImage ? '插画版做好了' : '主体已分离');
+  return { cutout, source: dataUrl, aiImage, aiNote };
 }
 
 /**
@@ -277,6 +318,11 @@ export async function paintSticker(
     const painted = await watercolorize(src, styleOpts);
     const rounded = await roundRectSticker(painted);
     return finalizeSticker(rounded.toDataURL('image/png'));
+  }
+
+  // 抠主体 + 淡彩：有 AI 画好的版本就用它（真正的手绘插画感），没有才走本地滤镜
+  if (opts.style !== 'original' && prepared.aiImage) {
+    return finalizeSticker(prepared.aiImage);
   }
 
   const cut = await loadImage(prepared.cutout);

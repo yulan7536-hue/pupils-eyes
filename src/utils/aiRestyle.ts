@@ -173,9 +173,28 @@ async function viaDoubao(imageDataUrl: string, prompt: string): Promise<string> 
 
 /* ---------------- 对外 ---------------- */
 
-/** 该通道当前能不能用（只检查有没有 Key，真实可用性要调用才知道） */
+/**
+ * 该通道当前能不能用（只检查有没有 Key，真实可用性要调用才知道） */
 export function aiProviderReady(p: AiProvider): boolean {
   return p === 'gemini' ? Boolean(geminiKey()) : Boolean(doubaoKey());
+}
+
+/** 读当前生效的 Key（给设置面板回填用） */
+export function readAiKey(p: AiProvider): string {
+  return p === 'gemini' ? geminiKey() : doubaoKey();
+}
+
+/** 页面内保存 Key：存 localStorage，刷新后仍生效，只影响当前浏览器 */
+export function setAiKey(p: AiProvider, key: string): void {
+  if (typeof window === 'undefined') return;
+  const storageKey = p === 'gemini' ? 'pupils-eyes:gemini-key' : 'pupils-eyes:doubao-key';
+  try {
+    const v = key.trim();
+    if (v) window.localStorage.setItem(storageKey, v);
+    else window.localStorage.removeItem(storageKey);
+  } catch {
+    /* 隐私模式下写不进去，忽略 */
+  }
 }
 
 /**

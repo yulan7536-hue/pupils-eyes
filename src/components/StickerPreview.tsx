@@ -7,8 +7,7 @@
  * 所以这里可以放心给滑块：拖一拖就换一版，不联网也不用重新识别主体。
  */
 import { useEffect, useRef, useState } from 'react';
-import { paintSticker, finalizeExternal, type PreparedPhoto, type StickerStyle } from '../utils/stickerAI';
-import { aiRestyle, aiProviderReady, type AiProvider } from '../utils/aiRestyle';
+import { paintSticker, type PreparedPhoto, type StickerStyle } from '../utils/stickerAI';
 
 interface StickerPreviewProps {
   prepared: PreparedPhoto;
@@ -36,39 +35,6 @@ export default function StickerPreview({ prepared, onConfirm, onRetry, onDiscard
 
   /** 序号：只认最后一次请求的结果，避免快速拖滑块时旧结果覆盖新结果 */
   const seq = useRef(0);
-
-  /** AI 重绘：本地滤镜改不了"这张图是怎么画的"，要真正像插画只能让模型重绘一次 */
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiError, setAiError] = useState('');
-  const [aiTag, setAiTag] = useState('');
-  const [aiReady] = useState(() => aiProviderReady('gemini') || aiProviderReady('doubao'));
-
-  const runAiRestyle = async () => {
-    setAiError('');
-    setAiBusy(true);
-    const order = (['gemini', 'doubao'] as AiProvider[]).filter(aiProviderReady);
-    if (!order.length) {
-      setAiError('没有可用的 AI Key（Gemini 或豆包）');
-      setAiBusy(false);
-      return;
-    }
-
-    let lastErr = '';
-    for (const provider of order) {
-      try {
-        const { dataUrl, provider: used } = await aiRestyle(prepared.source, provider);
-        const sticker = await finalizeExternal(dataUrl);
-        setResult(sticker);
-        setAiTag(used === 'gemini' ? 'Gemini 重绘' : '豆包重绘');
-        setAiBusy(false);
-        return;
-      } catch (err) {
-        lastErr = (err as Error).message || 'AI 重绘失败';
-      }
-    }
-    setAiError(lastErr);
-    setAiBusy(false);
-  };
 
   useEffect(() => {
     const mine = ++seq.current;
@@ -171,19 +137,6 @@ export default function StickerPreview({ prepared, onConfirm, onRetry, onDiscard
             </label>
           </div>
         )}
-
-        <div className="sticker-preview__ai">
-          <button
-            type="button"
-            className="sticker-preview__ai-btn"
-            onClick={runAiRestyle}
-            disabled={aiBusy}
-          >
-            {aiBusy ? 'AI 正在画…（10–30 秒）' : '✨ 让 AI 重画一版'}
-          </button>
-          {aiTag && !aiBusy && <span className="sticker-preview__ai-tag">来自 {aiTag}</span>}
-          {aiError && !aiBusy && <span className="sticker-preview__ai-err">{aiError}</span>}
-        </div>
 
         <div className="sticker-preview__actions">
           <button
