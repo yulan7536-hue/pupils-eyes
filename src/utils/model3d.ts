@@ -171,11 +171,40 @@ async function queryTask(id: string, key: string): Promise<TaskStatus> {
   };
 }
 
+/**
+ * 下载字节流。
+ * 优先走同源代理 /api/proxy（见 vite.config.ts 的 arkProxy）：
+ * 模型 zip 在火山 TOS 桶上，桶没配 CORS 头，浏览器直连会被拦成 `Failed to fetch`
+ * （Chrome 报 MissingAllowOriginHeader），这是线上「3D 上传失败」的真正原因。
+ * 代理不可用（例如纯静态托管）时退回直连，并给出可读的失败原因。
+ */
+async function downloadBytes(url: string): Promise<ArrayBuffer> {
+  let note = '';
+  try {
+    const viaProxy = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+    if (viaProxy.ok) return await viaProxy.arrayBuffer();
+    note = `（代理返回 ${viaProxy.status}）`;
+  } catch {
+    note = '（代理不可用）';
+  }
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`下载模型失败 ${res.status}`);
+    return await res.arrayBuffer();
+  } catch (err) {
+    // 直连失败几乎都是跨域：TOS 桶没有 Access-Control-Allow-Origin
+    const msg = String((err as Error)?.message ?? err);
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+      throw new Error(`CORS 拦截：模型文件所在存储不允许跨域读取${note}`);
+    }
+    throw err;
+  }
+}
+
 /** 下载 zip → 解压 → 取出里面最大的 .glb */
 async function extractGlbFromZip(url: string): Promise<Blob> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`下载模型失败 ${res.status}`);
-  const buf = new Uint8Array(await res.arrayBuffer());
+  const buf = new Uint8Array(await downloadBytes(url));
 
   // 万一直接就是 glb（不以 zip 结构返回的情况）
   if (buf[0] === 0x67 && buf[1] === 0x6c && buf[2] === 0x54) {

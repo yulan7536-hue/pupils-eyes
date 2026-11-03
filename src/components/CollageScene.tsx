@@ -93,6 +93,7 @@ const STICKER_BASE = 1.9;
 function describe3DFailure(msg: string): string {
   if (msg.includes('AccountOverdue')) return 'AI 账户欠费，3D 生成暂不可用';
   if (msg.includes('401') || msg.includes('Unauthorized')) return 'AI Key 无效，3D 生成暂不可用';
+  if (msg.includes('CORS')) return '模型文件下载被跨域拦截，请刷新后重试';
   if (msg.includes('Failed to fetch')) return '网络不通，3D 生成失败，稍后再试';
   if (msg.includes('超时')) return '3D 生成超时了，可以再试一次';
   if (msg.includes('InvalidParameter')) return '这张图不符合要求（需 jpg/png，小于 4096px）';
@@ -143,6 +144,15 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
   const spriteMapRef = useRef<Map<string, THREE.Sprite>>(new Map());
   const textureCacheRef = useRef<Map<string, THREE.Texture>>(new Map());
   const dragRef = useRef<{ id: string; plane: THREE.Plane; raycaster: THREE.Raycaster } | null>(null);
+  /** 右键拖动旋转 3D 摆件时记录起始角度与指针位置 */
+  const spinRef = useRef<{
+    id: string;
+    group: THREE.Group;
+    startX: number;
+    startY: number;
+    yaw: number;
+    pitch: number;
+  } | null>(null);
 
   // 用 ref 镜像最新 state，避免事件回调里闭包过期
   const stickersRef = useRef(stickers);
@@ -225,6 +235,7 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
       if (existing) {
         existing.position.set(stk.x, stk.y, stk.z);
         existing.rotation.y = stk.rotation;
+        existing.rotation.x = stk.tiltX ?? 0;
         existing.scale.setScalar(stk.scale);
         return;
       }
@@ -263,6 +274,7 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
             group.add(makeGroundShadow());
             group.position.set(stk.x, stk.y, stk.z);
             group.rotation.y = stk.rotation;
+            group.rotation.x = stk.tiltX ?? 0;
             group.scale.setScalar(stk.scale);
             // 让 pick 能沿父链找回 stickerId
             group.traverse((o) => {
@@ -413,7 +425,54 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
       return null;
     };
 
+    /** 只判定 3D 摆件（右键旋转用，避免点到平面贴纸） */
+    const pickModel = (e: PointerEvent): string | null => {
+      const models = [...modelMapRef.current.values()];
+      if (!models.length) return null;
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(models, true);
+      if (!hits.length) return null;
+      let o: THREE.Object3D | null = hits[0].object;
+      while (o) {
+        const id = o.userData.stickerId as string | undefined;
+        if (id) return id;
+        o = o.parent;
+      }
+      return null;
+    };
+
+    /** 右键旋转的灵敏度：水平约 1 圈 / 570px，垂直稍钝一些 */
+    const YAW_SPEED = 0.011;
+    const PITCH_SPEED = 0.008;
+    /** 俯仰限制在 ±80°，再往外就翻个底朝天了；水平不限，可以连续转很多圈 */
+    const PITCH_LIMIT = 1.4;
+
     const onPointerDown = (e: PointerEvent) => {
+      // —— 右键按住：360° 旋转 3D 摆件 ——
+      if (e.button === 2) {
+        const id = pickModel(e);
+        if (!id) return; // 没点在 3D 摆件上就什么也不做（保留当前选中）
+        const group = modelMapRef.current.get(id);
+        if (!group) return;
+        const stk = stickersRef.current.find((s) => s.id === id);
+        setSelectedId(id);
+        const spin = {
+          id,
+          group,
+          startX: e.clientX,
+          startY: e.clientY,
+          yaw: stk?.rotation ?? group.rotation.y,
+          pitch: stk?.tiltX ?? group.rotation.x,
+        };
+        spinRef.current = spin;
+        (renderer.domElement as HTMLCanvasElement).setPointerCapture(e.pointerId);
+        renderer.domElement.style.cursor = 'grabbing';
+        return;
+      }
+
       if (e.button !== 0) return;
       const id = pick(e);
       if (id) {
@@ -426,8 +485,26 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
     };
 
     const onPointerMove = (e: PointerEvent) => {
+      const spin = spinRef.current;
+      if (spin) {
+        // 水平拖动 = 绕 Y 轴转（不限角度，能一直转）；垂直拖动 = 俯仰
+        spin.group.rotation.y = spin.yaw + (e.clientX - spin.startX) * YAW_SPEED;
+        spin.group.rotation.x = THREE.MathUtils.clamp(
+          spin.pitch + (e.clientY - spin.startY) * PITCH_SPEED,
+          -PITCH_LIMIT,
+          PITCH_LIMIT
+        );
+        return;
+      }
+
       const drag = dragRef.current;
-      if (!drag) return;
+      if (!drag) {
+        // 悬停在 3D 摆件上时给个「可旋转」的手型提示
+        if (e.buttons === 0) {
+          renderer.domElement.style.cursor = pickModel(e) ? 'grab' : '';
+        }
+        return;
+      }
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -448,7 +525,26 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
       }
     };
 
+    const endSpin = (e: PointerEvent) => {
+      const spin = spinRef.current;
+      if (!spin) return false;
+      spinRef.current = null;
+      const yaw = spin.group.rotation.y;
+      const pitch = spin.group.rotation.x;
+      setStickers((prev) =>
+        prev.map((s) => (s.id === spin.id ? { ...s, rotation: yaw, tiltX: pitch } : s))
+      );
+      renderer.domElement.style.cursor = '';
+      try {
+        (renderer.domElement as HTMLCanvasElement).releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      return true;
+    };
+
     const onPointerUp = (e: PointerEvent) => {
+      if (endSpin(e)) return;
       const drag = dragRef.current;
       if (!drag) return;
       dragRef.current = null;
@@ -465,9 +561,14 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
       }
     };
 
+    // 右键旋转期间不能弹出浏览器右键菜单
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
+
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('pointercancel', onPointerUp);
+    renderer.domElement.addEventListener('contextmenu', onContextMenu);
 
     // —— 渲染循环 ——
     let animId = 0;
@@ -486,6 +587,9 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      renderer.domElement.removeEventListener('pointercancel', onPointerUp);
+      renderer.domElement.removeEventListener('contextmenu', onContextMenu);
+      spinRef.current = null;
       controls.dispose();
       scene.traverse((o) => {
         const m = o as THREE.Mesh;
@@ -605,7 +709,11 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
 
   // 上传照片 → AI 识别主体 + 抠图 → 预览确认 → 收进背包
   const handleUpload = async (file: File) => {
-    if (quota <= 0) return;
+    if (quota <= 0) {
+      setDockOpen(false);
+      showToast('贴纸额度用完了，去「任务」里领一张再来');
+      return;
+    }
     setDockOpen(false);
     setAiProgress({ pct: 0, stage: '准备中' });
     try {
@@ -666,7 +774,11 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
 
   /** 3D 生成：照片 → Seed3D → glb → 预览确认 */
   const handleMake3D = async (file: File) => {
-    if (quota <= 0) return;
+    if (quota <= 0) {
+      setDockOpen(false);
+      showToast('贴纸额度用完了，去「任务」里领一张再来');
+      return;
+    }
     setDockOpen(false);
     setAiProgress({ pct: 1, stage: '正在上传照片' });
     try {
@@ -903,7 +1015,11 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
 
       <p className="collage-hint">
         <span className="collage-hint__mouse" aria-hidden="true" />
-        {selected ? '拖动移动 · 滚轮缩放 · Delete 删除' : '左键选贴纸 · 拖动移动 · 滚轮缩放'}
+        {selected?.kind === '3d'
+          ? '右键按住拖动 360° 旋转 · 左键拖动移动 · 滚轮缩放'
+          : selected
+            ? '拖动移动 · 滚轮缩放 · Delete 删除'
+            : '左键选贴纸 · 拖动移动 · 滚轮缩放'}
       </p>
     </div>
   );

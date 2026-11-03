@@ -100,8 +100,10 @@ export interface Sticker {
   z: number;
   /** 缩放倍数 */
   scale: number;
-  /** 绕屏幕法线的旋转（弧度）；3D 摆件为绕 Y 轴旋转 */
+  /** 绕屏幕法线的旋转（弧度）；3D 摆件为绕 Y 轴旋转（右键拖动可 360° 转） */
   rotation: number;
+  /** 仅 3D 摆件：绕 X 轴的俯仰角（弧度），右键上下拖动改变，默认 0 */
+  tiltX?: number;
   /** 水平镜像 */
   flipX: boolean;
   /** 层级，越大越靠前 */
