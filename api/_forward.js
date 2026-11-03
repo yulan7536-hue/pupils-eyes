@@ -47,6 +47,9 @@ export function forward(req, res, target, body) {
       fwd[k] = v;
     }
 
+    // 强制上游返回未压缩，避免 gzip body 透传但缺 Content-Encoding 导致前端解析失败
+    fwd['accept-encoding'] = 'identity';
+
     // 服务端配了 Key 就一律用它，忽略前端传来的
     if (SERVER_KEY && /^ark\.cn-beijing\.volces\.com$/i.test(parsed.hostname)) {
       fwd.authorization = `Bearer ${SERVER_KEY}`;

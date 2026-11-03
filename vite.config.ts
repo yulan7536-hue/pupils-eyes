@@ -182,6 +182,8 @@ function arkProxy(serverKey: string): Plugin {
         if (!v || ['host', 'content-length', 'connection', 'origin', 'referer'].includes(k)) continue;
         headers[k] = Array.isArray(v) ? v.join(',') : v;
       }
+      // 强制上游返回未压缩，否则 gzip body 透传缺 Content-Encoding，前端解析失败
+      headers['accept-encoding'] = 'identity';
       // 与服务端一致：配了 Key 就用服务端的，前端不必也不该持有
       if (serverKey && /^ark\.cn-beijing\.volces\.com$/i.test(parsed.hostname)) {
         headers.authorization = `Bearer ${serverKey}`;

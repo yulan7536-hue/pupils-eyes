@@ -82,6 +82,11 @@ function proxyTo(req, res, target) {
     fwd[k] = v;
   }
 
+  // 强制上游返回未压缩：这里只透传了 Content-Type、没透传 Content-Encoding，
+  // 若方舟按浏览器的 Accept-Encoding 回 gzip，body 是压缩的但浏览器不知道要解压，
+  // 前端 res.json() 就会拿到乱码。要 identity 最省事。
+  fwd['accept-encoding'] = 'identity';
+
   // 服务端配了 Key 就一律用它，忽略前端传来的（防止被抓包后换成别人的 Key）
   if (SERVER_KEY && /^ark\.cn-beijing\.volces\.com$/i.test(parsed.hostname)) {
     fwd.authorization = `Bearer ${SERVER_KEY}`;
