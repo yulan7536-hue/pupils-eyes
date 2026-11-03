@@ -16,7 +16,7 @@
 
 import { aiCutout } from './rembg';
 import { watercolorize, type WatercolorOptions } from './watercolor';
-import { aiRestyle, aiProviderReady, type AiProvider } from './aiRestyle';
+import { aiRestyle } from './aiRestyle';
 
 const DOUBAO_KEY_LOCAL = 'pupils-eyes:doubao-key';
 
@@ -275,20 +275,16 @@ export async function prepareSticker(
   let aiImage: string | undefined;
   let aiNote = '';
 
-  const providers = (['doubao', 'gemini'] as AiProvider[]).filter(aiProviderReady);
-  if (providers.length) {
+  if (hasDoubaoKey()) {
     report(68, 'AI 正在画一版插画（约 20 秒）');
-    for (const provider of providers) {
-      try {
-        const { dataUrl: painted } = await aiRestyle(dataUrl, provider);
-        // AI 会给主体补上背景，再抠一次才是干净贴纸
-        report(88, '正在分离画好的主体');
-        const aiBlob = await aiCutout(dataUrlToBlob(painted));
-        aiImage = await blobToDataUrl(aiBlob);
-        break;
-      } catch (err) {
-        aiNote = (err as Error).message || 'AI 重绘失败';
-      }
+    try {
+      const { dataUrl: painted } = await aiRestyle(dataUrl);
+      // AI 会给主体补上背景，再抠一次才是干净贴纸
+      report(88, '正在分离画好的主体');
+      const aiBlob = await aiCutout(dataUrlToBlob(painted));
+      aiImage = await blobToDataUrl(aiBlob);
+    } catch (err) {
+      aiNote = (err as Error).message || 'AI 重绘失败';
     }
   }
 

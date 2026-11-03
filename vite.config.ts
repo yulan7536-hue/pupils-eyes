@@ -1,6 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import {ProxyAgent, fetch as undiciFetch} from 'undici';
 import {defineConfig, type Plugin} from 'vite';
 import type {IncomingMessage, ServerResponse} from 'node:http';
 
@@ -25,6 +26,20 @@ const ALLOWED_HOSTS = [
 const MAX_BYTES = 120 * 1024 * 1024;
 /** 本代理响应的路径 */
 const API_PATHS = ['/generate', '/task', '/download'];
+
+/**
+ * Node 自带的 fetch（undici）默认**不读** HTTPS_PROXY / HTTP_PROXY 环境变量，
+ * 所以在本机需要走代理才能访问方舟的网络里，dev 中间件会一直 `fetch failed`，
+ * 「照片变贴纸」的 AI 重绘就永远回落成纯抠图。这里显式把代理交给 undici。
+ * 线上（Vercel / 腾讯云）没有这些环境变量，自动走直连，不受影响。
+ */
+const PROXY_URL =
+  process.env.HTTPS_PROXY ||
+  process.env.https_proxy ||
+  process.env.HTTP_PROXY ||
+  process.env.http_proxy ||
+  '';
+const proxyDispatcher = PROXY_URL ? new ProxyAgent(PROXY_URL) : undefined;
 
 function arkProxy(): Plugin {
   const handler = async (
@@ -87,11 +102,12 @@ function arkProxy(): Plugin {
         headers[k] = Array.isArray(v) ? v.join(',') : v;
       }
 
-      const upstream = await fetch(parsed.toString(), {
+      const upstream = await undiciFetch(parsed.toString(), {
         method,
         headers,
         body: method === 'GET' || method === 'HEAD' || !body ? undefined : new Uint8Array(body),
         signal: ac.signal,
+        dispatcher: proxyDispatcher,
       });
       if (!upstream.ok) {
         res.statusCode = upstream.status;
