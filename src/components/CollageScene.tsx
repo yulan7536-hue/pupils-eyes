@@ -16,7 +16,7 @@ import {
   type MySticker,
 } from '../utils/stickerStore';
 import { prepareSticker, type PreparedPhoto } from '../utils/stickerAI';
-import { warmupCutout } from '../utils/rembg';
+import { warmupCutout, isModelCached } from '../utils/rembg';
 import { generate3D, waitModel3D, loadPendingTask, clearPendingTask } from '../utils/model3d';
 import { saveModel, listModels, removeModel, getModel, type Model3DItem } from '../utils/modelStore';
 import StickerDock from './StickerDock';
@@ -119,6 +119,8 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
   const [models, setModels] = useState<Model3DItem[]>([]);
   /** 已抠好主体、等待确认的照片（非空时显示预览确认框） */
   const [preview, setPreview] = useState<PreparedPhoto | null>(null);
+  /** 抠图模型是否已缓存（false 时面板上会提示首次需要下载） */
+  const [modelReady, setModelReady] = useState(true);
   /** 刚生成好待确认的 3D 模型（确认后才入背包并落地） */
   const [preview3d, setPreview3d] = useState<Model3DItem | null>(null);
   /** 轻提示（AI 降级原因等） */
@@ -621,7 +623,17 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
    */
   useEffect(() => {
     if (!dockOpen) return;
-    void warmupCutout();
+    let alive = true;
+    void isModelCached().then((ok) => {
+      if (alive) setModelReady(ok);
+    });
+    void warmupCutout().then(async () => {
+      const ok = await isModelCached();
+      if (alive) setModelReady(ok);
+    });
+    return () => {
+      alive = false;
+    };
   }, [dockOpen]);
 
   // —— 键盘：Esc 退出 / Delete·Backspace 删除选中贴纸 ——
@@ -912,6 +924,7 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
           quota={quota}
           library={library}
           models={models}
+          modelReady={modelReady}
           onAddPreset={addPreset}
           onAddMySticker={(stk) => {
             placeSticker(stk.src);

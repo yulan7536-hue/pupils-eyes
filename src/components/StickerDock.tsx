@@ -24,6 +24,8 @@ interface StickerDockProps {
   onUpload: (file: File) => void;
   onUpload3D: (file: File) => void;
   onClose: () => void;
+  /** 抠图模型是否已缓存到本地；false 时提示首次要下载 */
+  modelReady?: boolean;
 }
 
 function mb(bytes: number) {
@@ -42,6 +44,7 @@ export default function StickerDock({
   onUpload,
   onUpload3D,
   onClose,
+  modelReady = true,
 }: StickerDockProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const input3dRef = useRef<HTMLInputElement>(null);
@@ -167,7 +170,11 @@ export default function StickerDock({
             {quota > 0 ? `还剩 ${quota} 次 AI 上传` : '额度用完 · 完成任务可解锁'}
           </span>
         </div>
-        <span className="sticker-dock__tip">3D 生成约 3–10 分钟，可以先关掉背包逛花园</span>
+        <span className="sticker-dock__tip">
+          {modelReady
+            ? '3D 生成约 3–10 分钟，可以先关掉背包逛花园'
+            : '首次使用需下载智能抠图模型（约 56MB），下完就秒开；现在正在后台下载'}
+        </span>
       </div>
 
       <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onFileChange} />
