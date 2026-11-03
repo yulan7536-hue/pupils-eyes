@@ -1,7 +1,9 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {ProxyAgent, fetch as undiciFetch} from 'undici';
+import dns from 'node:dns';
+import https from 'node:https';
+import {Agent, fetch as undiciFetch} from 'undici';
 import {defineConfig, type Plugin} from 'vite';
 import type {IncomingMessage, ServerResponse} from 'node:http';
 
@@ -28,18 +30,75 @@ const MAX_BYTES = 120 * 1024 * 1024;
 const API_PATHS = ['/generate', '/task', '/download'];
 
 /**
- * Node 自带的 fetch（undici）默认**不读** HTTPS_PROXY / HTTP_PROXY 环境变量，
- * 所以在本机需要走代理才能访问方舟的网络里，dev 中间件会一直 `fetch failed`，
- * 「照片变贴纸」的 AI 重绘就永远回落成纯抠图。这里显式把代理交给 undici。
- * 线上（Vercel / 腾讯云）没有这些环境变量，自动走直连，不受影响。
+ * 绕过本机 fake-ip 的 DNS。
+ *
+ * 很多人本机开着 Clash / Surge 一类的代理，DNS 会被接管成 fake-ip
+ * （ark.cn-beijing.volces.com → 198.18.x.x）。浏览器走代理规则能通，
+ * 但 Node 直连这个假 IP 必然超时，dev 中间件就一直 `fetch failed`，
+ * 「照片变贴纸」的 AI 重绘永远回落成纯抠图。
+ *
+ * 这里用阿里 DoH（直接连 223.5.5.5 的 443，不依赖系统 DNS）拿真实 IP，
+ * 只用于方舟转发；DoH 不可用时自动回退系统 DNS，线上没有 fake-ip 也照常工作。
  */
-const PROXY_URL =
-  process.env.HTTPS_PROXY ||
-  process.env.https_proxy ||
-  process.env.HTTP_PROXY ||
-  process.env.http_proxy ||
-  '';
-const proxyDispatcher = PROXY_URL ? new ProxyAgent(PROXY_URL) : undefined;
+const dohCache = new Map<string, { ip: string; exp: number }>();
+
+function resolveViaDoh(hostname: string): Promise<string | null> {
+  const cached = dohCache.get(hostname);
+  if (cached && cached.exp > Date.now()) return Promise.resolve(cached.ip);
+
+  return new Promise((resolve) => {
+    const req = https.request(
+      {
+        host: '223.5.5.5',
+        port: 443,
+        path: `/resolve?name=${encodeURIComponent(hostname)}&type=A`,
+        servername: 'dns.alidns.com',
+        rejectUnauthorized: false,
+        method: 'GET',
+        timeout: 4000,
+      },
+      (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (c) => (body += c));
+        res.on('end', () => {
+          try {
+            const j = JSON.parse(body) as { Answer?: { type: number; data: string }[] };
+            const ans = (j.Answer ?? []).find((a) => a.type === 1);
+            if (ans?.data) {
+              dohCache.set(hostname, { ip: ans.data, exp: Date.now() + 60_000 });
+              resolve(ans.data);
+            } else {
+              resolve(null);
+            }
+          } catch {
+            resolve(null);
+          }
+        });
+      }
+    );
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(null);
+    });
+    req.end();
+  });
+}
+
+/** 转发用 agent：优先 DoH 真实 IP，拿不到就用系统 DNS */
+const arkAgent = new Agent({
+  connect: {
+    lookup(hostname, options, callback) {
+      void resolveViaDoh(hostname)
+        .then((ip) => {
+          if (ip) callback(null, ip, 4);
+          else dns.lookup(hostname, options, callback);
+        })
+        .catch(() => dns.lookup(hostname, options, callback));
+    },
+  },
+});
 
 function arkProxy(): Plugin {
   const handler = async (
@@ -107,7 +166,7 @@ function arkProxy(): Plugin {
         headers,
         body: method === 'GET' || method === 'HEAD' || !body ? undefined : new Uint8Array(body),
         signal: ac.signal,
-        dispatcher: proxyDispatcher,
+        dispatcher: arkAgent,
       });
       if (!upstream.ok) {
         res.statusCode = upstream.status;
