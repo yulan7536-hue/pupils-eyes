@@ -9,12 +9,16 @@ import type {IncomingMessage, ServerResponse} from 'node:http';
  * 浏览器直连会报 `MissingAllowOriginHeader`（Failed to fetch），
  * 于是「照片变 3D 摆件」在生成 3-5 分钟后才失败。
  *
- * 这里挂一个同源代理把它绕过去：/api/proxy?url=<encoded>
+ * 这里挂一个同源代理把它绕过去：/ark-proxy?url=<encoded>
  * - dev（configureServer）与 preview（configurePreviewServer）都生效，
  *   线上部署跑的正是 `vite preview`，所以不用额外起后端服务。
  * - 只放行火山方舟相关域名，避免变成任意 URL 的开放代理（SSRF）。
+ * - 路径特意不用 /api 前缀：部署平台的网关会抢占 /api/*，任何请求都返回
+ *   `Unsupported zti authentication method`，根本到不了这个中间件。
  */
-const PROXY_PATH = '/api/proxy';
+const PROXY_PATH = '/ark-proxy';
+/** 生图接口地址固定，直接写死，不走 url 参数（见下） */
+const ARK_GENERATE_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/images/generations';
 const ALLOWED_HOSTS = [
   /(^|\.)tos-cn-beijing\.volces\.com$/i,
   /^ark\.cn-beijing\.volces\.com$/i,
@@ -30,7 +34,16 @@ function arkProxy(): Plugin {
   ) => {
     if (!req.url?.startsWith(PROXY_PATH)) return next();
 
-    const target = new URL(req.url, 'http://localhost').searchParams.get('url') ?? '';
+    const reqUrl = new URL(req.url, 'http://localhost');
+    let target = reqUrl.searchParams.get('url') ?? '';
+    // 生图 endpoint 固定，用路径 /ark-proxy/generate 表达，不带 url 参数。
+    // 线上部署平台的网关会拦截「query 里带外部 https URL」的代理请求
+    // （返回 `Unsupported zti authentication method`），导致豆包图生图在线上
+    // 永远到不了这里、只能 fallback 到 Gemini。把目标从 query 挪到路径即可绕过。
+    if (reqUrl.pathname === `${PROXY_PATH}/generate`) {
+      target = ARK_GENERATE_ENDPOINT;
+    }
+
     let parsed: URL;
     try {
       parsed = new URL(target);

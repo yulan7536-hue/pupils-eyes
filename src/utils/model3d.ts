@@ -173,7 +173,7 @@ async function queryTask(id: string, key: string): Promise<TaskStatus> {
 
 /**
  * 下载字节流。
- * 优先走同源代理 /api/proxy（见 vite.config.ts 的 arkProxy）：
+ * 优先走同源代理 /ark-proxy（见 vite.config.ts 的 arkProxy）：
  * 模型 zip 在火山 TOS 桶上，桶没配 CORS 头，浏览器直连会被拦成 `Failed to fetch`
  * （Chrome 报 MissingAllowOriginHeader），这是线上「3D 上传失败」的真正原因。
  * 代理不可用（例如纯静态托管）时退回直连，并给出可读的失败原因。
@@ -181,7 +181,7 @@ async function queryTask(id: string, key: string): Promise<TaskStatus> {
 async function downloadBytes(url: string): Promise<ArrayBuffer> {
   let note = '';
   try {
-    const viaProxy = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+    const viaProxy = await fetch(`/ark-proxy?url=${encodeURIComponent(url)}`);
     if (viaProxy.ok) return await viaProxy.arrayBuffer();
     note = `（代理返回 ${viaProxy.status}）`;
   } catch {
