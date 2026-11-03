@@ -131,9 +131,14 @@ export async function aiCutout(
   return blob;
 }
 
-/** 预热：用户打开贴纸面板时后台把模型拉下来，真正点"抠图"时就不用等 */
+/**
+ * 预热：用户打开贴纸面板时后台把模型拉下来，真正点"抠图"时就不用等。
+ *
+ * 必须并发下载：模型被切成 15 个 4MB 块，单连接拉完要三分钟，
+ * 开 6 条并发能把首次等待压到几十秒。反正是在后台跑，不挡用户操作。
+ */
 export async function warmupCutout(): Promise<void> {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || typeof caches === 'undefined') return;
   try {
     const cache = await caches.open(CACHE_NAME);
     const base = resourceBase();
@@ -147,13 +152,28 @@ export async function warmupCutout(): Promise<void> {
       for (const c of entry.chunks ?? []) names.push(c.name);
     }
 
-    // 只有全部命中才算预热过；缺一个就整体补齐，避免半加载状态
+    // 已经全部命中就不必再发请求
+    const missing: string[] = [];
     for (const n of names) {
       const url = new URL(n, base).toString();
-      if (await cache.match(url)) continue;
-      const res = await fetch(url);
-      if (res.ok) await cache.put(url, res.clone());
+      if (!(await cache.match(url))) missing.push(url);
     }
+    if (!missing.length) return;
+
+    // 6 路并发
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < missing.length) {
+        const url = missing[cursor++];
+        try {
+          const res = await fetch(url);
+          if (res.ok) await cache.put(url, res.clone());
+        } catch {
+          /* 单个块失败不影响其它，真正抠图时会补 */
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(6, missing.length) }, worker));
   } catch {
     /* 预热失败无所谓，真正抠图时会重新拉 */
   }
