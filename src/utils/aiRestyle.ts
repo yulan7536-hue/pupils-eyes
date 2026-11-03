@@ -18,15 +18,20 @@ const GEMINI_MODEL = 'gemini-2.5-flash-image';
 const DOUBAO_MODEL = 'doubao-seedream-5-0-flash-260915';
 const ARK_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/images/generations';
 
-/** 参考图（扁平数码插画）的风格描述，写成模型容易照做的分条指令 */
-export const FLAT_ILLUSTRATION_PROMPT = `把这张照片重新绘制成扁平数码插画，风格要求：
-1. 用清晰的深棕黑色细线勾勒出所有物体的轮廓和主要结构，线条要连贯。
-2. 配色改成马卡龙粉彩：浅粉、奶油白、淡薄荷绿、雾霾蓝、鹅黄、浅杏色。
-3. 颜色以大块平涂为主，块面之间的过渡要干净，不要照片的渐变和噪点。
+/**
+ * 钢笔淡彩（Line and Wash）风格描述。
+ * 与上一版「扁平数码插画」（大块平涂 + 均匀描边）的关键区别：
+ * 线条是速写式的细线（断笔、轻重顿挫），颜色是透出纸白的薄水彩，留白多。
+ * 写成模型容易照做的分条指令，并显式排除平涂/厚涂，避免模型落回扁平滑向。
+ */
+export const LINE_WASH_PROMPT = `把这张照片重新绘制成【钢笔淡彩 Line and Wash】手绘插画，务必和扁平平涂插画拉开明显差距：
+1. 线稿：用纤细、带有随性手绘感的深棕色墨水线条，密集勾勒出主体的全部轮廓和细节（毛发纹理、衣纹褶皱、五官、叶脉、花纹、结构转折）。线条要有轻重顿挫和断笔，像速写，不要均匀、不要僵硬、不要电脑描边。
+2. 上色：在线稿上薄薄地叠水彩，颜料极淡、几乎透明，能透出纸白；配色用马卡龙粉彩（浅粉、奶油白、淡薄荷绿、雾霾蓝、鹅黄、浅杏色）。
+3. 留白：大面积留白，主体周围和受光面保留纸白，不要把颜色填满、不要大块平涂。
 4. 保留原图的构图、主体外形和关键特征，不要改变主体是什么东西。
-5. 光影简化：只用一整块受光面和一整块背光面表现体积，不要真实反射和高光点。
-6. 背景简化为干净的色块或在主体周围留白。
-整体要像手绘的儿童绘本插画，而不是照片加了滤镜。不要文字、不要水印、不要边框。`;
+5. 整体是治愈系童话绘本质感，像儿童插画或明信片，透视不必精确，略带童趣和适度夸张。
+6. 背景简化为淡淡的色块或直接留白，方便后续抠出主体。
+不要照片质感、不要厚涂、不要 3D 渲染、不要文字、不要水印、不要边框。`;
 
 export type AiProvider = 'gemini' | 'doubao';
 
@@ -208,7 +213,7 @@ export function setAiKey(p: AiProvider, key: string): void {
 export async function aiRestyle(
   sourceImage: string,
   provider: AiProvider,
-  prompt: string = FLAT_ILLUSTRATION_PROMPT
+  prompt: string = LINE_WASH_PROMPT
 ): Promise<AiRestyleResult> {
   const dataUrl =
     provider === 'gemini'
