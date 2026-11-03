@@ -6857,6 +6857,107 @@ textarea.input {
   cursor: pointer;
 }
 
+.sticker-preview__loading {
+  font-family: var(--font-cn-script);
+  font-size: clamp(12px, calc(var(--u) * 1.5), 16px);
+  color: var(--retro-ink-muted);
+  letter-spacing: 0.08em;
+}
+
+/* 画风切换：两颗小胶囊，手账风 */
+.sticker-preview__styles {
+  display: flex;
+  justify-content: center;
+  gap: calc(var(--u) * 0.6);
+  flex-wrap: wrap;
+  margin-bottom: calc(var(--u) * 1.4);
+}
+
+.sticker-preview__style {
+  border: var(--toon-border);
+  border-radius: 999px;
+  background: #fff;
+  padding: calc(var(--u) * 0.5) calc(var(--u) * 1.15);
+  font-family: var(--font-cn-script);
+  font-size: clamp(11px, calc(var(--u) * 1.3), 14px);
+  letter-spacing: 0.02em;
+  color: var(--retro-ink-stroke);
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 calc(var(--u) * 0.25) 0 var(--retro-ink-stroke);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.sticker-preview__style:hover {
+  transform: translateY(-1px);
+}
+
+.sticker-preview__style.is-active {
+  background: #ffe0a8;
+}
+
+/* 风格参数 */
+.sticker-preview__knobs {
+  display: grid;
+  gap: calc(var(--u) * 0.9);
+  margin-bottom: calc(var(--u) * 1.8);
+  padding: 0 calc(var(--u) * 0.6);
+}
+
+.sticker-preview__knob {
+  display: grid;
+  grid-template-columns: calc(var(--u) * 6.4) 1fr calc(var(--u) * 4);
+  align-items: center;
+  gap: calc(var(--u) * 0.9);
+  font-family: var(--font-cn-script);
+  font-size: clamp(11px, calc(var(--u) * 1.3), 14px);
+  color: var(--retro-ink-stroke);
+}
+
+.sticker-preview__knob em {
+  font-style: normal;
+  font-size: clamp(10px, calc(var(--u) * 1.2), 13px);
+  color: var(--retro-ink-muted);
+  text-align: right;
+}
+
+.sticker-preview__knob input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border: 1px solid var(--retro-ink-stroke);
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f6d9c4, #f7efe0);
+  cursor: pointer;
+}
+
+.sticker-preview__knob input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--retro-ink-stroke);
+  border-radius: 50%;
+  background: #ffe9c9;
+  box-shadow: 0 1px 0 var(--retro-ink-stroke);
+}
+
+.sticker-preview__knob input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--retro-ink-stroke);
+  border-radius: 50%;
+  background: #ffe9c9;
+}
+
+.sticker-preview__primary:disabled {
+  opacity: 0.55;
+  cursor: progress;
+  transform: none;
+}
+
+
 @keyframes stickerVeilIn {
   from {
     opacity: 0;

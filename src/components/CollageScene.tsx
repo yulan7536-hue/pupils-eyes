@@ -15,7 +15,8 @@ import {
   removeFromLibrary,
   type MySticker,
 } from '../utils/stickerStore';
-import { stylizeImage } from '../utils/stickerAI';
+import { prepareSticker, type PreparedPhoto } from '../utils/stickerAI';
+import { warmupCutout } from '../utils/rembg';
 import { generate3D, waitModel3D, loadPendingTask, clearPendingTask } from '../utils/model3d';
 import { saveModel, listModels, removeModel, getModel, type Model3DItem } from '../utils/modelStore';
 import StickerDock from './StickerDock';
@@ -116,8 +117,8 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
   const [library, setLibrary] = useState<MySticker[]>(() => loadLibrary());
   /** 已生成的 3D 摆件（IndexedDB 元信息） */
   const [models, setModels] = useState<Model3DItem[]>([]);
-  /** AI 抠图结果，非空时显示预览确认框 */
-  const [preview, setPreview] = useState<string | null>(null);
+  /** 已抠好主体、等待确认的照片（非空时显示预览确认框） */
+  const [preview, setPreview] = useState<PreparedPhoto | null>(null);
   /** 刚生成好待确认的 3D 模型（确认后才入背包并落地） */
   const [preview3d, setPreview3d] = useState<Model3DItem | null>(null);
   /** 轻提示（AI 降级原因等） */
@@ -613,6 +614,16 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
     saveStickers(stickers);
   }, [stickers]);
 
+  /**
+   * 打开贴纸背包时后台预热抠图模型（56MB，仅首次）。
+   * 用户翻贴纸、挑照片的这段时间刚好把模型拉完，
+   * 真正点「照片变贴纸」就不用干等下载了。
+   */
+  useEffect(() => {
+    if (!dockOpen) return;
+    void warmupCutout();
+  }, [dockOpen]);
+
   // —— 键盘：Esc 退出 / Delete·Backspace 删除选中贴纸 ——
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -707,7 +718,7 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
     setSelectedId(stk.id);
   };
 
-  // 上传照片 → AI 识别主体 + 抠图 → 预览确认 → 收进背包
+  // 上传照片 → 本地 AI 识别主体 + 抠图 → 预览里调风格 → 收进背包
   const handleUpload = async (file: File) => {
     if (quota <= 0) {
       setDockOpen(false);
@@ -717,20 +728,17 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
     setDockOpen(false);
     setAiProgress({ pct: 0, stage: '准备中' });
     try {
-      const result = await stylizeImage(file, (pct, stage) => setAiProgress({ pct, stage }));
+      const prepared = await prepareSticker(file, (pct, stage) => setAiProgress({ pct, stage }));
 
-      // 额度在 AI 调用后即扣（模型成本已发生，与是否收藏无关）
+      // 额度在抠图完成后即扣（本地也花了算力，与是否收藏无关）
       const nextQuota = quota - 1;
       setQuotaState(nextQuota);
       setQuota(nextQuota);
       bumpTask('upload');
       setTaskDot(hasUnclaimedReward());
 
-      if (!result.usedAI) {
-        showToast(result.failReason ?? 'AI 暂时不可用，已用本地淡彩替代');
-      }
       // 先给用户看结果，确认后才进背包
-      setPreview(result.dataUrl);
+      setPreview(prepared);
     } catch (err) {
       console.warn('[collage] 上传处理失败', err);
       showToast('这张图没处理成功，换一张再试试');
@@ -740,10 +748,10 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
   };
 
   /** 预览确认：收进「我的贴纸」背包 + 直接贴到花园 */
-  const confirmPreview = () => {
-    if (!preview) return;
-    setLibrary(addToLibrary(preview));
-    placeSticker(preview);
+  const confirmPreview = (dataUrl: string) => {
+    if (!dataUrl) return;
+    setLibrary(addToLibrary(dataUrl));
+    placeSticker(dataUrl);
     setPreview(null);
     showToast('已收进贴纸背包');
   };
@@ -924,7 +932,7 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
       {/* AI 抠图结果预览确认 */}
       {preview && (
         <StickerPreview
-          src={preview}
+          prepared={preview}
           onConfirm={confirmPreview}
           onRetry={retryPreview}
           onDiscard={() => setPreview(null)}

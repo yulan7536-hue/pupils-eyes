@@ -85,6 +85,24 @@ function arkProxy(): Plugin {
   };
 }
 
+/**
+ * 剔掉 onnxruntime 自带的 WebGPU 版 wasm。
+ *
+ * 抠图库内部用 `new URL('...jsep.wasm', import.meta.url)` 引了这个 23MB 文件，
+ * Vite 会把它们一并复制进 dist。但我们走 cpu 后端，而且 wasmPaths 已经被
+ * 显式指向 /rembg/（同源托管的那一份），这个文件永远不会被加载。
+ */
+function dropOrtJsepWasm(): Plugin {
+  return {
+    name: 'drop-ort-jsep-wasm',
+    generateBundle(_options, bundle) {
+      for (const key of Object.keys(bundle)) {
+        if (/ort-wasm-simd-threaded\.jsep.*\.wasm$/i.test(key)) delete bundle[key];
+      }
+    },
+  };
+}
+
 export default defineConfig(({ command }) => {
   /**
    * 同一份 dist 要能挂在两种地方：
@@ -98,7 +116,7 @@ export default defineConfig(({ command }) => {
 
   return {
     base,
-    plugins: [react(), tailwindcss(), arkProxy()],
+    plugins: [react(), tailwindcss(), arkProxy(), dropOrtJsepWasm()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

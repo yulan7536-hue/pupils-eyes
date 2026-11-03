@@ -1,46 +1,25 @@
 /**
- * 贴纸 AI：照片 → 钢笔淡彩风贴纸。
+ * 照片 → 拼贴花园贴纸。
  *
- * 链路：客户端压缩 → 豆包（火山方舟）图生图做「钢笔淡彩风」迁移 → 前端 Canvas 去白底。
- * 豆包不可用 / 无 Key / 调用失败时，降级为前端滤镜模拟淡彩（不真抠图）。
+ * 全链路都在浏览器本机完成，不联网、不花钱、不需要填任何 Key：
+ *   1. 压缩         把长边压到 1024，控制后续计算量
+ *   2. AI 抠图      ISNet 语义分割，自动认出"画面里最主要的那个东西"（见 rembg.ts）
+ *   3. 换画风       钢笔淡彩管线，抹掉照片细节、压成粉彩、补墨线与纸纹（见 watercolor.ts）
+ *   4. 收尾         裁掉透明边 → 缩到 512 → 存 webp，一张 100–200KB
  *
- * 豆包走 OpenAI 兼容的 images/generations 端点，Key 优先读页面内 localStorage，
- * 其次读构建期环境变量 VITE_DOUBAO_API_KEY（见 .env.local）。
+ * 拆成 prepare / paint 两段，是因为用户要在预览里来回调风格参数：
+ * 抠图只做一次（慢），换风格只是本地重算（快），调参数不会重复下载模型。
+ *
+ * 说明：这里保留了豆包 Key 的读写函数。3D 摆件（model3d.ts）仍然走豆包 Seed3D，
+ * 那是单独的免费额度，与本文件的贴纸链路无关。
  */
+
+import { aiCutout } from './rembg';
+import { watercolorize, type WatercolorOptions } from './watercolor';
 
 const DOUBAO_KEY_LOCAL = 'pupils-eyes:doubao-key';
-const ARK_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/images/generations';
-/**
- * 图生图模型：Doubao Seedream 5.0 Flash（用户账号已开通，实测 200 可用）。
- * 其它备选 Model ID：doubao-seedream-5-0-pro-260628 / doubao-seedream-5-0-lite-260128
- * 若模型失效，到方舟「模型列表」换一个即可。
- */
-const DOUBAO_I2I_MODEL = 'doubao-seedream-5-0-flash-260915';
 
-/**
- * 图生图 prompt。
- * 写法刻意采用「先观察 → 再只画主体」的指令式结构：Seedream 对这类
- * 分步指令的理解明显优于一句话描述，能自动判断画面主体并丢掉背景。
- */
-const PEN_INK_PROMPT =
-  '第一步：仔细观察这张图，判断画面里最主要的那一个主体是什么' +
-  '（可能是一个人、一只动物、一件物品、一栋建筑、一朵花或一份手工作品）。' +
-  '第二步：只把这个主体重绘成钢笔淡彩风贴纸，完整保留它的外形轮廓、颜色和辨识度，不要改成一个别的物体。' +
-  '只画这一个主体，原图的背景、环境、地面、街道、其他物体一律不要画进来，也不要把整幅场景画进画面。' +
-  '画法：纤细的深棕色墨水线条勾勒轮廓与细节，水彩淡色轻薄晕染填色，' +
-  '低饱和马卡龙粉彩配色，保留纸面质感与自然留白。' +
-  '主体完整、居中、占画面约 75%，四周留白。' +
-  '背景为纯净的白色（#FFFFFF），不要阴影、不要投影、不要地面。' +
-  '无文字、无水印、无边框。';
-
-export interface StylizeResult {
-  /** 贴纸 dataURL（webp，透明背景） */
-  dataUrl: string;
-  /** 是否真的走了豆包 AI（false = 前端降级） */
-  usedAI: boolean;
-  /** 降级原因（usedAI=false 时有值），用于给用户可见提示 */
-  failReason?: string;
-}
+/* ---------------- 豆包 Key（3D 摆件复用） ---------------- */
 
 /** 读取豆包 Key：页面内 localStorage 优先，其次构建期环境变量 */
 export function getDoubaoKey(): string {
@@ -56,7 +35,6 @@ export function getDoubaoKey(): string {
   return env ?? '';
 }
 
-/** 页面内保存 / 清除豆包 Key */
 export function setDoubaoKey(key: string) {
   if (typeof window === 'undefined') return;
   try {
@@ -77,26 +55,30 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = reject;
+    img.onerror = () => reject(new Error('图片解码失败'));
     img.src = src;
   });
 }
 
-/** 客户端压缩：长边压到 maxLen，输出 JPEG dataURL */
-async function compressImage(file: File, maxLen = 1024): Promise<string> {
-  const bitmap = await createImageBitmap(file).catch(() => null);
-  const dataUrl = await new Promise<string>((resolve) => {
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
     const fr = new FileReader();
     fr.onload = () => resolve(fr.result as string);
-    fr.readAsDataURL(file);
+    fr.onerror = () => reject(new Error('读取文件失败'));
+    fr.readAsDataURL(blob);
   });
-  if (!bitmap) return dataUrl;
+}
 
-  const w = bitmap.width;
-  const h = bitmap.height;
-  const scale = Math.min(1, maxLen / Math.max(w, h));
-  const cw = Math.max(1, Math.round(w * scale));
-  const ch = Math.max(1, Math.round(h * scale));
+/** 压缩到长边 maxLen 的 JPEG，同时返回原始像素尺寸 */
+async function compress(file: File, maxLen: number): Promise<{ blob: Blob; dataUrl: string }> {
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) {
+    return { blob: file, dataUrl: await blobToDataUrl(file) };
+  }
+
+  const scale = Math.min(1, maxLen / Math.max(bitmap.width, bitmap.height));
+  const cw = Math.max(1, Math.round(bitmap.width * scale));
+  const ch = Math.max(1, Math.round(bitmap.height * scale));
 
   const c = document.createElement('canvas');
   c.width = cw;
@@ -106,99 +88,16 @@ async function compressImage(file: File, maxLen = 1024): Promise<string> {
   ctx.fillRect(0, 0, cw, ch);
   ctx.drawImage(bitmap, 0, 0, cw, ch);
   bitmap.close?.();
-  return c.toDataURL('image/jpeg', 0.85);
-}
 
-/** base64 → dataURL；URL 原样返回 */
-function b64ToDataUrl(raw: string, format = 'png'): string {
-  if (raw.startsWith('data:')) return raw;
-  if (raw.startsWith('http')) return raw;
-  return `data:image/${format};base64,${raw}`;
-}
-
-/**
- * 去白底（贴纸化）：把背景变透明，同时保护主体上的浅色细节（花瓣、白云等）。
- *
- * 策略 = 「边缘 flood fill」∪「全图纯白」：
- *  - flood fill 从四边向内扩散，吃掉与画面边缘连通的白底 / 浅灰底（阈值放宽到 218），
- *    这样水彩浅色渐变能被清干净；
- *  - 纯白（≥ 248）无论在哪都吃掉，处理主体内部镂空（如梁柱之间的透空）。
- *  - 两层都不命中的浅色像素（花瓣、奶白衣物）会被保留 —— 旧版「全图阈值」
- *    会把这些误删成半透明幽灵。
- *
- * 豆包用 output_format:'png' 输出，没有 JPEG 压缩噪点，所以不需要额外形态学清理。
- */
-async function cutoutWhite(imageSrc: string): Promise<string> {
-  const img = await loadImage(imageSrc);
-  const w = img.width;
-  const h = img.height;
-  const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  const ctx = c.getContext('2d')!;
-  ctx.drawImage(img, 0, 0);
-  const data = ctx.getImageData(0, 0, w, h);
-  const px = data.data;
-
-  /** 亮度（取最大通道，白色系判断更稳） */
-  const luma = (i: number) => Math.max(px[i], px[i + 1], px[i + 2]);
-
-  const FLOOD_THRESH = 226; // 与边缘连通的白底（含浅灰水彩晕染）
-  const PURE_THRESH = 246; // 任意位置的纯白
-
-  // —— 1) 从四边 flood fill ——
-  const visited = new Uint8Array(w * h);
-  const stack: number[] = [];
-  const push = (x: number, y: number) => {
-    if (x < 0 || y < 0 || x >= w || y >= h) return;
-    const p = y * w + x;
-    if (visited[p]) return;
-    if (luma(p * 4) < FLOOD_THRESH) return;
-    visited[p] = 1;
-    stack.push(p);
-  };
-  for (let x = 0; x < w; x++) {
-    push(x, 0);
-    push(x, h - 1);
-  }
-  for (let y = 0; y < h; y++) {
-    push(0, y);
-    push(w - 1, y);
-  }
-  while (stack.length) {
-    const p = stack.pop()!;
-    const x = p % w;
-    const y = (p - x) / w;
-    push(x + 1, y);
-    push(x - 1, y);
-    push(x, y + 1);
-    push(x, y - 1);
-  }
-
-  // —— 2) 置透明：flood 命中 ∪ 纯白 ——
-  for (let p = 0; p < w * h; p++) {
-    const i = p * 4;
-    const L = luma(i);
-    let alpha = px[i + 3];
-    if (visited[p]) {
-      alpha = 0;
-    } else if (L >= PURE_THRESH) {
-      // 纯白：越白越透明，246→1 平滑过渡到 255→0
-      alpha = Math.round(alpha * (1 - Math.min(1, (L - PURE_THRESH) / 9)));
-    }
-    px[i + 3] = alpha;
-  }
-
-  ctx.putImageData(data, 0, 0);
-  return c.toDataURL('image/png');
+  const dataUrl = c.toDataURL('image/jpeg', 0.86);
+  const blob = await new Promise<Blob>((resolve) => c.toBlob((b) => resolve(b ?? file), 'image/jpeg', 0.86));
+  return { blob, dataUrl };
 }
 
 /**
  * 贴纸收尾：裁掉四周全透明的边（保留 2% 内边距）+ 降采样到最长边 512 + 输出 webp。
- * - 裁边：AI 输出常带大块白边，裁掉后主体才能填满 Sprite，显得饱满清晰。
- * - 降采样 + webp：1K PNG 约 1.3–1.9MB，几张就撑爆 localStorage 配额；
- *   Sprite 在屏幕上只有一两百像素，512 webp 约 100–200KB 完全够用。
- * 无透明像素时（降级滤镜路径）只做降采样压缩。
+ * - 裁边：主体外常有一圈空白，裁掉后 Sprite 里才显得饱满。
+ * - 降采样 + webp：512 webp 约 100–200KB，比原图小一个数量级，localStorage 放得下。
  */
 async function finalizeSticker(pngDataUrl: string): Promise<string> {
   const img = await loadImage(pngDataUrl);
@@ -226,7 +125,6 @@ async function finalizeSticker(pngDataUrl: string): Promise<string> {
     }
   }
   if (maxX < 0) {
-    // 整张全透明（异常情况）：用整图，仍走降采样压缩
     minX = 0;
     minY = 0;
     maxX = w - 1;
@@ -241,7 +139,6 @@ async function finalizeSticker(pngDataUrl: string): Promise<string> {
 
   const cw = maxX - minX + 1;
   const ch = maxY - minY + 1;
-
   const MAX_EDGE = 512;
   const k = Math.min(1, MAX_EDGE / Math.max(cw, ch));
   const ow = Math.max(1, Math.round(cw * k));
@@ -259,99 +156,142 @@ async function finalizeSticker(pngDataUrl: string): Promise<string> {
   return webp.startsWith('data:image/webp') ? webp : out.toDataURL('image/png');
 }
 
-/** 前端降级：去饱和 + 提亮 + 轻微描边，模拟钢笔淡彩（不抠图） */
-async function fallbackStylize(imageSrc: string): Promise<string> {
-  const img = await loadImage(imageSrc);
-  const c = document.createElement('canvas');
-  c.width = img.width;
-  c.height = img.height;
-  const ctx = c.getContext('2d')!;
-  ctx.drawImage(img, 0, 0);
-  // 提亮 + 轻微降低饱和度，向淡彩靠
-  ctx.globalCompositeOperation = 'source-atop';
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.fillRect(0, 0, c.width, c.height);
-  ctx.globalCompositeOperation = 'saturation';
-  ctx.fillStyle = 'rgba(128,128,128,0.55)';
-  ctx.fillRect(0, 0, c.width, c.height);
-  ctx.globalCompositeOperation = 'source-over';
-  return c.toDataURL('image/png');
+/* ---------------- 对外接口 ---------------- */
+
+export interface PreparedPhoto {
+  /** 抠好图、背景透明（dataURL，PNG） */
+  cutout: string;
+  /** 抠图前的原图（dataURL，已压缩），「原色」模式直接用 */
+  source: string;
 }
 
-/** 把接口错误翻译成给用户看的一句话 */
-function describeFailure(msg: string): string {
-  if (msg.includes('AccountOverdue')) return 'AI 账户欠费，已用本地淡彩替代';
-  if (msg.includes('401') || msg.includes('Unauthorized')) return 'AI Key 无效，已用本地淡彩替代';
-  if (msg.includes('429')) return 'AI 调用太频繁，已用本地淡彩替代';
-  if (msg.includes('InvalidParameter')) return 'AI 参数异常，已用本地淡彩替代';
-  if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) return '网络不通，已用本地淡彩替代';
-  return 'AI 暂时不可用，已用本地淡彩替代';
+export type StickerStyle = 'watercolor' | 'original';
+
+export interface StickerStyleOptions {
+  style?: StickerStyle;
+  /**
+   * 不抠主体，整张照片做成圆角贴纸。
+   *
+   * AI 分割找的是"画面里最显著的那一个东西"。拍一堆积木、一片花田、
+   * 一张画满的画时，它只会留下其中一小块，用户会觉得"怎么把我拍的全删了"。
+   * 这种照片更适合整张裁成圆角贴纸 —— 和手工贴纸本里的照片贴一个道理。
+   */
+  whole?: boolean;
+  /** 水彩浓度 0–1（越大越淡） */
+  wash?: number;
+  /** 墨线 0–1 */
+  ink?: number;
 }
 
-/* ---------------- 主流程 ---------------- */
+/**
+ * 整张贴纸：把方图裁成圆角，并描一圈白边。
+ * 白边是"贴纸感"的关键 —— 有它才像从贴纸板上撕下来的一张。
+ */
+async function roundRectSticker(img: HTMLCanvasElement): Promise<HTMLCanvasElement> {
+  const w = img.width;
+  const h = img.height;
+  const border = Math.round(Math.min(w, h) * 0.055);
+  const cw = w + border * 2;
+  const ch = h + border * 2;
 
-export async function stylizeImage(
+  const out = document.createElement('canvas');
+  out.width = cw;
+  out.height = ch;
+  const ctx = out.getContext('2d')!;
+
+  const radius = Math.round(Math.min(w, h) * 0.12) + border;
+
+  const path = (x: number, y: number, ww: number, hh: number, r: number) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + ww - r, y);
+    ctx.quadraticCurveTo(x + ww, y, x + ww, y + r);
+    ctx.lineTo(x + ww, y + hh - r);
+    ctx.quadraticCurveTo(x + ww, y + hh, x + ww - r, y + hh);
+    ctx.lineTo(x + r, y + hh);
+    ctx.quadraticCurveTo(x, y + hh, x, y + hh - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  };
+
+  // 白底 + 极浅的投影边，贴到花园里不会糊在背景上
+  ctx.fillStyle = '#ffffff';
+  path(0, 0, cw, ch, radius);
+  ctx.fill();
+
+  ctx.save();
+  path(border, border, w, h, Math.max(2, radius - border));
+  ctx.clip();
+  ctx.drawImage(img, border, border);
+  ctx.restore();
+
+  return out;
+}
+
+/**
+ * 第一步：抠图。
+ * 慢（首次要下模型 + 推理），但只做一次，之后调风格不用重来。
+ */
+export async function prepareSticker(
   file: File,
   onProgress?: (pct: number, stage: string) => void
-): Promise<StylizeResult> {
+): Promise<PreparedPhoto> {
   const report = (pct: number, stage: string) => onProgress?.(pct, stage);
 
-  report(5, '读取图片');
-  const compressed = await compressImage(file, 1024);
-  report(30, '压缩完成');
+  report(4, '读取照片');
+  const { blob, dataUrl } = await compress(file, 1024);
 
-  const key = getDoubaoKey();
-  let failReason = '';
+  report(12, '正在识别画面主体');
+  const cutBlob = await aiCutout(blob, ({ pct, label }) => {
+    // 抠图占 12–92 的区间
+    report(12 + pct * 78, label);
+  });
 
-  if (key) {
-    report(40, '正在用 AI 生成淡彩风格');
-    try {
-      const res = await fetch(ARK_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${key}`,
-        },
-        body: JSON.stringify({
-          model: DOUBAO_I2I_MODEL,
-          prompt: PEN_INK_PROMPT,
-          // 图生图：image 传完整 data URL（含 data:image/jpeg;base64, 前缀）
-          image: [compressed],
-          size: '1K',
-          // PNG 输出：无 JPEG 压缩噪点，抠图后边缘干净
-          output_format: 'png',
-          // 注意：5.0 Flash 不支持 sequential_image_generation，传了会 400 InvalidParameter
-          watermark: false,
-          response_format: 'b64_json',
-        }),
-      });
+  report(94, '整理贴纸');
+  const cutout = await blobToDataUrl(cutBlob);
 
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        throw new Error(`doubao ${res.status}: ${errText.slice(0, 200)}`);
-      }
+  report(100, '主体已分离');
+  return { cutout, source: dataUrl };
+}
 
-      const json = await res.json();
-      const first = json?.data?.[0];
-      const b64 = first?.b64_json || first?.url;
-      if (!b64) throw new Error('doubao 未返回图像');
-      const fmt = (first?.output_format as string) || 'png';
+/**
+ * 第二步：出图。
+ * 读抠好的图 → 上画风 → 裁边压缩。纯本地，通常 100–300ms。
+ *
+ * - watercolor：钢笔淡彩（默认）
+ * - original：保留照片原色，只抠图
+ */
+export async function paintSticker(
+  prepared: PreparedPhoto,
+  opts: StickerStyleOptions = {}
+): Promise<string> {
+  const styleOpts: WatercolorOptions = {
+    wash: opts.wash ?? 0.55,
+    ink: opts.ink ?? 0.5,
+  };
 
-      report(85, '正在去掉白底');
-      const cut = await cutoutWhite(b64ToDataUrl(b64, fmt));
-      report(94, '正在裁边压缩');
-      const dataUrl = await finalizeSticker(cut);
-      report(100, '完成');
-      return { dataUrl, usedAI: true };
-    } catch (err) {
-      console.warn('[stickerAI] 豆包调用失败，降级为前端滤镜', err);
-      failReason = describeFailure(String((err as Error)?.message ?? err));
-    }
+  // 整张照片做贴纸：不走抠图，直接上画风再裁圆角
+  if (opts.whole) {
+    const src = await loadImage(prepared.source);
+    const painted = await watercolorize(src, styleOpts);
+    const rounded = await roundRectSticker(painted);
+    return finalizeSticker(rounded.toDataURL('image/png'));
   }
 
-  // 降级：前端滤镜 + 同样的降采样压缩（否则 1.9MB PNG 会撑爆 localStorage）
-  report(70, 'AI 暂不可用，用本地淡彩处理');
-  const dataUrl = await finalizeSticker(await fallbackStylize(compressed));
-  report(100, '完成');
-  return { dataUrl, usedAI: false, failReason };
+  const cut = await loadImage(prepared.cutout);
+
+  if (opts.style === 'original') {
+    return finalizeSticker(prepared.cutout);
+  }
+
+  const painted = await watercolorize(cut, styleOpts);
+  return finalizeSticker(painted.toDataURL('image/png'));
+}
+
+/** 预览里没确认就关掉时，把中间产物释放掉，避免内存里堆一堆 dataURL */
+export function disposePrepared(prepared: PreparedPhoto | null): void {
+  if (!prepared) return;
+  prepared.cutout = '';
+  prepared.source = '';
 }
