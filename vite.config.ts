@@ -4,7 +4,6 @@ import path from 'path';
 import dns from 'node:dns';
 import net from 'node:net';
 import https from 'node:https';
-import {Agent, fetch as undiciFetch} from 'undici';
 import {defineConfig, loadEnv, type Plugin} from 'vite';
 import type {IncomingMessage, ServerResponse} from 'node:http';
 
@@ -87,37 +86,31 @@ function resolveViaDoh(hostname: string): Promise<string | null> {
   });
 }
 
-/** 转发用 agent：优先 DoH 真实 IP，拿不到就用系统 DNS */
-const arkAgent = new Agent({
-  connect: {
-    lookup(hostname, options, callback) {
-      const cb = callback as (
-        err: NodeJS.ErrnoException | null,
-        address: string | { address: string; family: number }[],
-        family?: number
-      ) => void;
+/**
+ * 转发时用的 DNS 解析：优先 DoH 真实 IP，拿不到就用系统 DNS。
+ *
+ * 直接交给 `https.request` 的 lookup 选项，不用 undici —— 少一个依赖，
+ * 也避免 undici 8 要求 Node ≥ 22.19 而在构建机上加载失败。
+ */
+const dohLookup = (
+  hostname: string,
+  options: dns.LookupOptions,
+  callback: (
+    err: NodeJS.ErrnoException | null,
+    address: string | dns.LookupAddress[],
+    family: number
+  ) => void
+) => {
+  const fallback = () => dns.lookup(hostname, options, callback);
 
-      const fallback = () => dns.lookup(hostname, options, callback as never);
-
-      void resolveViaDoh(hostname)
-        .then((ip) => {
-          // 只认合法 IPv4，DoH 偶发返回空/异常时立刻回退，别把坏值喂给 undici
-          if (!ip || !net.isIPv4(ip)) {
-            fallback();
-            return;
-          }
-          // undici 的 connect 会带 all:true —— 这时必须回数组，
-          // 否则它会拿字符串当列表，抛 ERR_INVALID_IP_ADDRESS: undefined
-          if ((options as { all?: boolean } | undefined)?.all) {
-            cb(null, [{address: ip, family: 4}]);
-          } else {
-            cb(null, ip, 4);
-          }
-        })
-        .catch(fallback);
-    },
-  },
-});
+  void resolveViaDoh(hostname)
+    .then((ip) => {
+      // 只认合法 IPv4，DoH 偶发返回空/异常时立刻回退
+      if (ip && net.isIPv4(ip)) callback(null, ip, 4);
+      else fallback();
+    })
+    .catch(fallback);
+};
 
 function arkProxy(serverKey: string): Plugin {
   const handler = async (
@@ -194,33 +187,67 @@ function arkProxy(serverKey: string): Plugin {
         headers.authorization = `Bearer ${serverKey}`;
       }
 
-      const upstream = await undiciFetch(parsed.toString(), {
-        method,
-        headers,
-        body: method === 'GET' || method === 'HEAD' || !body ? undefined : new Uint8Array(body),
-        signal: ac.signal,
-        dispatcher: arkAgent,
+      // 用原生 https.request（不走 undici），lookup 里做 DoH 兜底
+      const upstream = await new Promise<{
+        status: number;
+        headers: Record<string, string | string[] | undefined>;
+        body: Buffer;
+      }>((resolve, reject) => {
+        const upReq = https.request(
+          parsed,
+          {
+            method,
+            headers,
+            timeout: 90_000,
+            lookup: dohLookup as never,
+          },
+          (upRes) => {
+            const chunks: Buffer[] = [];
+            let total = 0;
+            upRes.on('data', (c: Buffer) => {
+              total += c.length;
+              if (total > MAX_BYTES) {
+                upReq.destroy(new Error('upstream too large'));
+                return;
+              }
+              chunks.push(c);
+            });
+            upRes.on('end', () =>
+              resolve({
+                status: upRes.statusCode ?? 502,
+                headers: upRes.headers,
+                body: Buffer.concat(chunks),
+              })
+            );
+            upRes.on('error', reject);
+          }
+        );
+        upReq.on('error', reject);
+        upReq.on('timeout', () => upReq.destroy(new Error('upstream timeout')));
+        ac.signal.addEventListener('abort', () => upReq.destroy(new Error('aborted')));
+        if (body) upReq.write(body);
+        upReq.end();
       });
-      if (!upstream.ok) {
+
+      if (upstream.status >= 400) {
         res.statusCode = upstream.status;
         // 把上游的错误体透传回去，前端才能看清是欠费还是参数错
-        const text = await upstream.text().catch(() => '');
         res.setHeader('Content-Type', 'application/json');
-        res.end(text || `upstream ${upstream.status}`);
+        res.end(upstream.body.toString('utf8') || `upstream ${upstream.status}`);
         return;
       }
-      const len = upstream.headers.get('content-length');
+      const len = upstream.headers['content-length'];
       if (len && Number(len) > MAX_BYTES) {
         res.statusCode = 413;
         res.end('too large');
         return;
       }
-      const buf = new Uint8Array(await upstream.arrayBuffer());
       res.statusCode = 200;
-      res.setHeader('Content-Type', upstream.headers.get('content-type') ?? 'application/octet-stream');
-      res.setHeader('Content-Length', String(buf.byteLength));
+      const ct = upstream.headers['content-type'];
+      res.setHeader('Content-Type', (Array.isArray(ct) ? ct[0] : ct) ?? 'application/octet-stream');
+      res.setHeader('Content-Length', String(upstream.body.byteLength));
       res.setHeader('Cache-Control', 'no-store');
-      res.end(buf);
+      res.end(upstream.body);
     } catch (err) {
       const e = err as Error & { cause?: { code?: string; message?: string } };
       // 线上只报一句，本地把 cause 打全 —— 否则 "fetch failed" 等于没说
