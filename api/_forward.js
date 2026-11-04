@@ -17,7 +17,12 @@ const ALLOWED_HOSTS = [
  * 豆包 Key 只在服务端（Vercel 环境变量 DOUBAO_API_KEY）。
  * 不要用 VITE_ 前缀，那样会被打进前端 bundle 公开。
  */
-const SERVER_KEY = (process.env.DOUBAO_API_KEY || process.env.VITE_DOUBAO_API_KEY || '').trim();
+const SERVER_KEY = (
+  process.env.DOUBAO_API_KEY ||
+  process.env.ARK_API_KEY ||
+  process.env.VITE_DOUBAO_API_KEY ||
+  ''
+).trim();
 
 /**
  * 把请求转发到火山方舟。

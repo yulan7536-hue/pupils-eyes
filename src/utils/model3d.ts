@@ -17,6 +17,7 @@
 
 import { unzipSync } from 'fflate';
 import { getDoubaoKey } from './stickerAI';
+import { hasServerAi } from './aiRestyle';
 
 const SEED3D_MODEL = 'doubao-seed3d-2-0-260328';
 /** 轮询间隔（文档建议别太猛，3D 生成本身要几分钟） */
@@ -111,12 +112,12 @@ async function toDataUrl(file: File, maxEdge = 1024): Promise<string> {
 
 async function createTask(dataUrl: string, key: string): Promise<string> {
   // 方舟接口没有 CORS 头，直连必 Failed to fetch，走同源 /task（dev 中间件 / 线上 server.js）
+  // 浏览器没 Key 时不带 Authorization，由服务端注入（线上正规姿势）
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (key) headers.Authorization = `Bearer ${key}`;
   const res = await fetch('/task', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`,
-    },
+    headers,
     body: JSON.stringify({
       model: SEED3D_MODEL,
       content: [
@@ -154,9 +155,9 @@ interface TaskStatus {
 }
 
 async function queryTask(id: string, key: string): Promise<TaskStatus> {
-  const res = await fetch(`/task?id=${encodeURIComponent(id)}`, {
-    headers: { Authorization: `Bearer ${key}` },
-  });
+  const headers: Record<string, string> = {};
+  if (key) headers.Authorization = `Bearer ${key}`;
+  const res = await fetch(`/task?id=${encodeURIComponent(id)}`, { headers });
   const txt = await res.text().catch(() => '');
   let j: Record<string, unknown> = {};
   try {
@@ -232,7 +233,8 @@ async function extractGlbFromZip(url: string): Promise<Blob> {
  */
 export async function startModel3D(file: File): Promise<string> {
   const key = getDoubaoKey();
-  if (!key) throw new Error('未配置豆包 API Key');
+  // 线上 Key 只在服务端，浏览器本来就没有，问一次后端即可
+  if (!key && !(await hasServerAi())) throw new Error('未配置豆包 API Key');
   const dataUrl = await toDataUrl(file, 1024);
   const id = await createTask(dataUrl, key);
   savePendingTask({ id, startedAt: Date.now() });
@@ -245,7 +247,7 @@ export async function waitModel3D(
   onProgress?: (pct: number, stage: string) => void
 ): Promise<Model3DResult> {
   const key = getDoubaoKey();
-  if (!key) throw new Error('未配置豆包 API Key');
+  if (!key && !(await hasServerAi())) throw new Error('未配置豆包 API Key');
 
   const started = Date.now();
   // 进度：3D 生成本身不可观测，用时间估算（前 90% 给生成，后 10% 给下载解压）

@@ -303,7 +303,12 @@ export default defineConfig(({ command, mode }) => {
    *   DOUBAO_API_KEY，VITE_ 那个只作兼容旧配置。）
    */
   const env = loadEnv(mode, process.cwd(), '');
-  const serverKey = (env.DOUBAO_API_KEY || env.VITE_DOUBAO_API_KEY || '').trim();
+  const serverKey = (
+    env.DOUBAO_API_KEY ||
+    env.ARK_API_KEY ||
+    env.VITE_DOUBAO_API_KEY ||
+    ''
+  ).trim();
   /**
    * 同一份 dist 要能挂在两种地方：
    * - GitHub Pages 项目站点，前缀 /pupils-eyes/

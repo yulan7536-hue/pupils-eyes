@@ -62,7 +62,12 @@ const ALLOWED_HOSTS = [
  * 都能拿到 Key 去刷额度。部署时用环境变量 DOUBAO_API_KEY 传进来
  * （setup-server.sh 会写进 .env，pm2 读）。
  */
-const SERVER_KEY = (process.env.DOUBAO_API_KEY || process.env.VITE_DOUBAO_API_KEY || '').trim();
+const SERVER_KEY = (
+  process.env.DOUBAO_API_KEY ||
+  process.env.ARK_API_KEY ||
+  process.env.VITE_DOUBAO_API_KEY ||
+  ''
+).trim();
 
 /** 校验并转发一个请求到火山方舟（只放行白名单域名，防 SSRF） */
 function proxyTo(req, res, target) {
