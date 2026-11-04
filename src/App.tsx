@@ -8,7 +8,6 @@ import BookSpread from './components/BookSpread';
 import WorkSheet from './components/WorkSheet';
 import RegionDialog from './components/RegionDialog';
 import RoleDialog from './components/RoleDialog';
-import XingzhiStudio from './components/XingzhiStudio';
 import CollageScene from './components/CollageScene';
 import PinBurst from './components/PinBurst';
 import LoginDialog from './auth/LoginDialog';
@@ -96,7 +95,7 @@ export default function App() {
 
   // 原有状态：全量保留
   const [step, setStep] = useState<Step>(() =>
-    typeof window !== 'undefined' && ['#lawn', '#note', '#album', '#studio', '#collage'].includes(window.location.hash)
+    typeof window !== 'undefined' && ['#lawn', '#note', '#album', '#collage', '#admin'].includes(window.location.hash)
       ? 'LAWN'
       : 'INTRO'
   );
@@ -174,10 +173,6 @@ export default function App() {
   );
   const [sheet, setSheet] = useState<WorkItem | null>(null);
 
-  const [studio, setStudio] = useState<boolean>(
-    () => typeof window !== 'undefined' && window.location.hash === '#studio'
-  );
-
   // 拼贴花园模式
   const [collageOpen, setCollageOpen] = useState<boolean>(
     () => typeof window !== 'undefined' && window.location.hash === '#collage'
@@ -208,15 +203,6 @@ export default function App() {
     const t = timers.current;
     return () => t.forEach((id) => window.clearTimeout(id));
   }, []);
-
-  useEffect(() => {
-    if (!studio) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setStudio(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [studio]);
 
   useEffect(() => {
     saveWorks(works);
@@ -490,10 +476,6 @@ export default function App() {
             setBook(b);
           }}
           onOpenUpload={openUpload}
-          onOpenStudio={() => {
-            storySound.playPaperTurn();
-            setStudio(true);
-          }}
           onOpenCollage={() => {
             requireAuth(() => {
               storySound.playPaperTurn();
@@ -504,23 +486,6 @@ export default function App() {
           onReplay={replay}
           onInspectArtifact={(key: string) => setActiveArtifactKey(key)}
           onOpenAdmin={() => setAdminOpen(true)}
-        />
-      )}
-
-      {/* 工作台全量保留 */}
-      {studio && (
-        <XingzhiStudio
-          onClose={() => {
-            storySound.playPaperTurn();
-            setStudio(false);
-          }}
-          onSync={(filled) => {
-            say(
-              filled >= 4
-                ? '四维打磨记录与童眼作品已同步至行智开物主平台【学生个人数字资产包】'
-                : `已同步 ${filled} 维记录，补齐四维才会生成完整作品档案`
-            );
-          }}
         />
       )}
 

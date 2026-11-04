@@ -37,8 +37,6 @@ interface MainLawnProps {
   onPinAnchor: (at: { x: number; y: number } | null) => void;
   onOpenBook: (book: 'note' | 'album') => void;
   onOpenUpload: () => void;
-  /** 打开「行智开物 × 童眼」工作台（感官打捞 + 四维打磨） */
-  onOpenStudio: () => void;
   /** 打开「拼贴花园」模式（2.5D 可旋转场景 + 贴纸） */
   onOpenCollage: () => void;
   onSelectPin: (pin: PinItem) => void;
@@ -77,7 +75,6 @@ export default function MainLawn({
   onPinAnchor,
   onOpenBook,
   onOpenUpload,
-  onOpenStudio,
   onOpenCollage,
   onSelectPin,
   onReplay,
@@ -276,33 +273,28 @@ export default function MainLawn({
           </span>
         </h1>
         <div className="hud__right">
-          <AccountButton />
-          <button type="button" className="hud__action" onClick={onOpenUpload}>
-            <span className="btn-cn">上传课题</span>
-            <span className="btn-en" lang="en">
-              Submit Research
-            </span>
-          </button>
-          <button
-            type="button"
-            className="hud__action hud__action--studio"
-            onClick={onOpenStudio}
-          >
-            <span className="btn-cn">感官工作台</span>
-            <span className="btn-en" lang="en">
-              Sensory Atelier
-            </span>
-          </button>
-          <button
-            type="button"
-            className="hud__action hud__action--collage"
-            onClick={onOpenCollage}
-          >
-            <span className="btn-cn">拼贴花园</span>
-            <span className="btn-en" lang="en">
-              Collage Garden
-            </span>
-          </button>
+          <div className="hud__account">
+            <AccountButton />
+          </div>
+
+          <div className="hud__actions">
+            <button type="button" className="hud__action" onClick={onOpenUpload}>
+              <span className="btn-cn">上传课题</span>
+              <span className="btn-en" lang="en">
+                Submit Research
+              </span>
+            </button>
+            <button
+              type="button"
+              className="hud__action hud__action--collage"
+              onClick={onOpenCollage}
+            >
+              <span className="btn-cn">拼贴花园</span>
+              <span className="btn-en" lang="en">
+                Collage Garden
+              </span>
+            </button>
+          </div>
         </div>
       </header>
 

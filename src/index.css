@@ -5318,24 +5318,71 @@ textarea.input {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: calc(var(--u) * 0.5);
+  gap: calc(var(--u) * 0.8);
   pointer-events: none;
 }
 
-/* 工作台入口比「上传课题」轻一档：它是探索入口，不是主行动。
-   原来靠「无边框文字 + 小星芒」分主次，改成药丸后改用底色分：
-   主行动纯白，次行动半透明奶白，厚度一样、明度退一档。 */
-.hud__action--studio {
-  background: rgba(255, 255, 255, 0.9);
+/* 账号是「我是谁」，不是「要做什么」，所以不跟两个药丸平铺：
+   单独一行、样式做薄，视觉上先读到行动，需要时再低头找身份。 */
+.hud__account {
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
 }
 
-.hud__action--studio .btn-cn {
-  font-size: clamp(12px, calc(var(--u) * 1.55), 17px);
-  letter-spacing: 0.05em;
+.hud__account .hud__action {
+  min-height: 0;
+  padding: calc(var(--u) * 0.35) calc(var(--u) * 1.3);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 calc(var(--u) * 0.22) 0 rgba(45, 55, 72, 0.38); /* taste-skill-ignore shadow: 薄标签也有实体切面 */
 }
 
-.hud__action--studio:hover {
+.hud__account .hud__action:hover {
   background: #ffffff;
+  transform: none;
+  box-shadow: 0 calc(var(--u) * 0.3) 0 rgba(45, 55, 72, 0.38); /* taste-skill-ignore shadow: 悬停加厚切面 */
+}
+
+.hud__account .btn-cn {
+  font-size: clamp(11px, calc(var(--u) * 1.3), 14px);
+  letter-spacing: 0.04em;
+}
+
+/* 账号标签不留英文副标：三个入口里它层级最低，两行会把这一簇撑高 */
+.hud__account .btn-en {
+  display: none;
+}
+
+/* 两个内容入口并排：上传课题是主行动（纯白），拼贴花园是次行动（半透明奶白）。
+   窄屏允许换行，宁可折成两行也不横向溢出。 */
+.hud__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: calc(var(--u) * 0.6);
+}
+
+@media (max-width: 720px) {
+  .hud__right {
+    gap: calc(var(--u) * 0.5);
+  }
+
+  .hud__actions {
+    gap: calc(var(--u) * 0.45);
+  }
+
+  .hud__actions .hud__action {
+    padding: calc(var(--u) * 0.7) calc(var(--u) * 1.5);
+  }
+}
+
+/* 手机宽度下标题要占 62vw，两个药丸并排会把它挤出去（实测 560px 时刚好溢出）。
+   这时退回竖排——和改版前一样，宁可少一列也不让按钮压住标题。 */
+@media (max-width: 620px) {
+  .hud__actions {
+    flex-direction: column;
+    align-items: flex-end;
+  }
 }
 
 /* ============================================================
