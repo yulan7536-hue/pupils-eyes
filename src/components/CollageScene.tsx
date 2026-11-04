@@ -13,12 +13,15 @@ import {
   loadLibrary,
   addToLibrary,
   removeFromLibrary,
+  patchLibraryItem,
   type MySticker,
 } from '../utils/stickerStore';
+import { publishSticker, setStickerPublic, removeRemoteSticker } from '../utils/stickerCloud';
 import { prepareSticker, type PreparedPhoto } from '../utils/stickerAI';
 import { warmupCutout, isModelCached } from '../utils/rembg';
 import { generate3D, waitModel3D, loadPendingTask, clearPendingTask } from '../utils/model3d';
-import { saveModel, listModels, removeModel, getModel, type Model3DItem } from '../utils/modelStore';
+import { saveModel, listModels, removeModel, getModel, updateModelThumb, type Model3DItem } from '../utils/modelStore';
+import { compressThumb } from '../utils/imageCompress';
 import StickerDock from './StickerDock';
 import StickerPreview from './StickerPreview';
 import ModelPreview from './ModelPreview';
@@ -115,6 +118,8 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
   const [taskDot, setTaskDot] = useState<boolean>(() => hasUnclaimedReward());
   /** 「我的贴纸」素材库 */
   const [library, setLibrary] = useState<MySticker[]>(() => loadLibrary());
+  /** 正在公开/撤下的那一张，用来禁用按钮、避免连点重复插入 */
+  const [publishingId, setPublishingId] = useState<string | null>(null);
   /** 已生成的 3D 摆件（IndexedDB 元信息） */
   const [models, setModels] = useState<Model3DItem[]>([]);
   /** 已抠好主体、等待确认的照片（非空时显示预览确认框） */
@@ -795,6 +800,46 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
     setSelectedId(stk.id);
   };
 
+  /**
+   * 公开 / 撤下一张贴纸。
+   *
+   * 第一次公开才真正往云端插一行；之后再点只是改 is_public，
+   * 这样「先公开，撤下，又后悔」不会在素材库里堆一串重复的贴纸。
+   */
+  const togglePublish = async (id: string) => {
+    const item = library.find((s) => s.id === id);
+    if (!item || publishingId) return;
+
+    setPublishingId(id);
+    try {
+      if (item.remoteId) {
+        await setStickerPublic(item.remoteId, !item.isPublic);
+        setLibrary(patchLibraryItem(id, { isPublic: !item.isPublic }));
+        showToast(item.isPublic ? '已从公共素材库撤下' : '已公开，别人可以拿去用了');
+      } else {
+        const remoteId = await publishSticker({
+          dataUrl: item.src,
+          title: `拼贴贴纸 · ${new Date().toLocaleDateString('zh-CN')}`,
+        });
+        setLibrary(patchLibraryItem(id, { remoteId, isPublic: true }));
+        showToast('已放公共素材库，别人可以拿去用了');
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '公开失败，稍后再试');
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
+  /** 从背包删除：如果它同时公开着，远端那条也一起收掉，免得留下无法管理的孤儿 */
+  const removeMySticker = (id: string) => {
+    const item = library.find((s) => s.id === id);
+    if (item?.remoteId) {
+      void removeRemoteSticker(item.remoteId).catch(() => {});
+    }
+    setLibrary(removeFromLibrary(id));
+  };
+
   /** 3D 生成：照片 → Seed3D → glb → 预览确认 */
   const handleMake3D = async (file: File) => {
     if (quota <= 0) {
@@ -806,7 +851,11 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
     setAiProgress({ pct: 1, stage: '正在上传照片' });
     try {
       const res = await generate3D(file, (pct, stage) => setAiProgress({ pct, stage }));
-      const item = await saveModel(res.glb);
+      // 先拿原照片当封面占位；预览框转起来之后会用真实模型截图覆盖它
+      const thumb = await compressThumb(file)
+        .then((r) => r.dataUrl)
+        .catch(() => undefined);
+      const item = await saveModel(res.glb, thumb);
       setModels((prev) => [item, ...prev]);
 
       const nextQuota = quota - 1;
@@ -933,7 +982,14 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
             placeSticker(stk.src);
             setDockOpen(false);
           }}
-          onRemoveMySticker={(id) => setLibrary(removeFromLibrary(id))}
+          onRemoveMySticker={removeMySticker}
+          onTogglePublish={(id) => void togglePublish(id)}
+          publishingId={publishingId}
+          onAddPublicSticker={(src) => {
+            placeSticker(src);
+            setDockOpen(false);
+            showToast('已贴进你的花园');
+          }}
           onAddModel={(item) => {
             placeModel3D(item);
             setDockOpen(false);
@@ -960,6 +1016,12 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
         <ModelPreview
           item={preview3d}
           onConfirm={confirmPreview3d}
+          onSnapshot={(dataUrl) => {
+            void updateModelThumb(preview3d.id, dataUrl);
+            setModels((prev) =>
+              prev.map((m) => (m.id === preview3d.id ? { ...m, thumb: dataUrl } : m))
+            );
+          }}
           onRetry={() => {
             setPreview3d(null);
             setDockOpen(true);
@@ -1004,8 +1066,21 @@ export default function CollageScene({ onClose }: CollageSceneProps) {
           <button type="button" onClick={() => updateSticker(selected.id, { scale: Math.min(3.5, selected.scale * 1.18) })}>
             放大
           </button>
-          <button type="button" onClick={() => updateSticker(selected.id, { rotation: selected.rotation + Math.PI / 8 })}>
-            {selected.kind === '3d' ? '转向' : '旋转'}
+          {/* 旋转分两个方向：three.js 里正角度是逆时针，2D 精灵和 3D 组一致，
+              所以两个按钮只需要差一个正负号，用户点起来才符合直觉。 */}
+          <button
+            type="button"
+            title="逆时针旋转"
+            onClick={() => updateSticker(selected.id, { rotation: selected.rotation + Math.PI / 8 })}
+          >
+            ↺ {selected.kind === '3d' ? '左转' : '逆时针'}
+          </button>
+          <button
+            type="button"
+            title="顺时针旋转"
+            onClick={() => updateSticker(selected.id, { rotation: selected.rotation - Math.PI / 8 })}
+          >
+            ↻ {selected.kind === '3d' ? '右转' : '顺时针'}
           </button>
           {/* 镜像 / 复制 / 层级只对平面贴纸有意义 */}
           {selected.kind !== '3d' && (

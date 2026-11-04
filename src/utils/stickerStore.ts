@@ -19,6 +19,10 @@ export interface MySticker {
   src: string;
   /** 生成时间戳 */
   createdAt: number;
+  /** 已发布到公共素材库时的远端 id */
+  remoteId?: string;
+  /** 是否对所有人可见 */
+  isPublic?: boolean;
 }
 
 /** 素材库最多保留多少张（localStorage 容量保护） */
@@ -43,6 +47,13 @@ function saveLibrary(list: MySticker[]) {
   } catch {
     /* 配额满时静默失败，不阻塞使用 */
   }
+}
+
+/** 改某一张的元信息（公开状态、远端 id），返回新列表 */
+export function patchLibraryItem(id: string, patch: Partial<MySticker>): MySticker[] {
+  const next = loadLibrary().map((s) => (s.id === id ? { ...s, ...patch } : s));
+  saveLibrary(next);
+  return next;
 }
 
 /** 新增一张自制贴纸到素材库（超出上限时丢最旧的）；返回新列表 */

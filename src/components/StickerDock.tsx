@@ -1,7 +1,9 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { makePresetSticker, PRESET_STICKERS, presetLabel } from '../utils/stickerAssets';
 import type { MySticker } from '../utils/stickerStore';
 import type { Model3DItem } from '../utils/modelStore';
+import { listPublicStickers, markStickerUsed, type PublicSticker } from '../utils/stickerCloud';
+import { useAuth } from '../auth/useAuth';
 
 /**
  * 底部贴纸背包抽屉：
@@ -19,6 +21,12 @@ interface StickerDockProps {
   onAddPreset: (name: string) => void;
   onAddMySticker: (stk: MySticker) => void;
   onRemoveMySticker: (id: string) => void;
+  /** 公开 / 取消公开自己的贴纸 */
+  onTogglePublish: (id: string) => void;
+  /** 正在发布的那一张，用来显示 loading */
+  publishingId?: string | null;
+  /** 把公共素材库里的贴纸贴进自己花园 */
+  onAddPublicSticker: (src: string, remoteId: string) => void;
   onAddModel: (item: Model3DItem) => void;
   onRemoveModel: (id: string) => void;
   onUpload: (file: File) => void;
@@ -39,6 +47,9 @@ export default function StickerDock({
   onAddPreset,
   onAddMySticker,
   onRemoveMySticker,
+  onTogglePublish,
+  publishingId = null,
+  onAddPublicSticker,
   onAddModel,
   onRemoveModel,
   onUpload,
@@ -48,6 +59,34 @@ export default function StickerDock({
 }: StickerDockProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const input3dRef = useRef<HTMLInputElement>(null);
+  const { status } = useAuth();
+
+  // 公共素材库：谁都能看（公开读），所以不等登录
+  const [publics, setPublics] = useState<PublicSticker[]>([]);
+  const [pubLoading, setPubLoading] = useState(true);
+  const [pubErr, setPubErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setPubLoading(true);
+    listPublicStickers()
+      .then((list) => {
+        if (alive) {
+          setPublics(list);
+          setPubErr(null);
+        }
+      })
+      .catch((err) => {
+        if (alive) setPubErr(err instanceof Error ? err.message : '素材库暂时取不到');
+      })
+      .finally(() => {
+        if (alive) setPubLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+    // 自己刚发布/撤下之后要重拉一次
+  }, [library, publishingId]);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -75,6 +114,7 @@ export default function StickerDock({
       {models.length > 0 && (
         <div className="sticker-dock__section">
           <h4 className="sticker-dock__label">3D 摆件 · {models.length}</h4>
+          <p className="sticker-dock__hint">模型文件较大，只保存在这台设备上</p>
           <div className="sticker-dock__presets">
             {models.map((m) => (
               <div key={m.id} className="sticker-dock__mine">
@@ -84,7 +124,11 @@ export default function StickerDock({
                   onClick={() => onAddModel(m)}
                   title="摆进花园"
                 >
-                  <span className="sticker-dock__cube" aria-hidden="true" />
+                  {m.thumb ? (
+                    <img className="sticker-dock__thumb" src={m.thumb} alt="3D 摆件预览" />
+                  ) : (
+                    <span className="sticker-dock__cube" aria-hidden="true" />
+                  )}
                   <span>{mb(m.bytes)}</span>
                 </button>
                 <button
@@ -105,6 +149,7 @@ export default function StickerDock({
       {library.length > 0 && (
         <div className="sticker-dock__section">
           <h4 className="sticker-dock__label">我的贴纸 · {library.length}</h4>
+          <p className="sticker-dock__hint">点「公开」会放进公共素材库，别人可以拿去用</p>
           <div className="sticker-dock__presets">
             {library.map((s) => (
               <div key={s.id} className="sticker-dock__mine">
@@ -125,11 +170,52 @@ export default function StickerDock({
                 >
                   ×
                 </button>
+
+                {status === 'authed' && (
+                  <button
+                    type="button"
+                    className={`sticker-dock__pub${s.isPublic ? ' is-on' : ''}`}
+                    onClick={() => onTogglePublish(s.id)}
+                    disabled={publishingId === s.id}
+                    title={s.isPublic ? '取消公开' : '公开给所有人用'}
+                  >
+                    {publishingId === s.id ? '···' : s.isPublic ? '已公开' : '公开'}
+                  </button>
+                )}
               </div>
             ))}
           </div>
         </div>
       )}
+
+      <div className="sticker-dock__section">
+        <h4 className="sticker-dock__label">公共素材库 · {publics.length}</h4>
+        <p className="sticker-dock__hint">大家公开的贴纸，点一下就能贴进自己的花园</p>
+        {pubErr && <p className="sticker-dock__hint">{pubErr}</p>}
+        {pubLoading && publics.length === 0 && <p className="sticker-dock__hint">正在取素材…</p>}
+        {!pubLoading && !pubErr && publics.length === 0 && (
+          <p className="sticker-dock__hint">还没有人公开贴纸，你可以做第一个</p>
+        )}
+        {publics.length > 0 && (
+          <div className="sticker-dock__presets">
+            {publics.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="sticker-dock__preset"
+                title={`${s.title || '贴纸'} · 已被使用 ${s.useCount} 次`}
+                onClick={() => {
+                  void markStickerUsed(s.id);
+                  onAddPublicSticker(s.src, s.id);
+                }}
+              >
+                <img src={s.src} alt={s.title || '公共贴纸'} />
+                <span className="tnum">{s.useCount > 0 ? `用 ${s.useCount}` : '新'}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="sticker-dock__section">
         <h4 className="sticker-dock__label">预置贴纸</h4>

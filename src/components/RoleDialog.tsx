@@ -8,7 +8,12 @@ import RadarChart from './RadarChart';
 interface RoleDialogProps {
   location: LocationChoice;
   onClose: () => void;
-  onSubmit: (payload: SubmissionPayload) => void;
+  /**
+   * 提交时把文件本身一起交出去，而不是 blob: 预览地址。
+   * blob 地址活不过一次刷新，之前存的就是它，所以以前换个页面图就没了。
+   * 返回 false 表示没存上：这时不能关表单，否则刚写的正文就白写了。
+   */
+  onSubmit: (payload: SubmissionPayload, image?: File | null) => Promise<boolean> | boolean | void;
 }
 
 type Stage = 'idle' | 'reading' | 'analyzing' | 'done' | 'error';
@@ -27,7 +32,7 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
   const [age, setAge] = useState('9');
   const [content, setContent] = useState('');
   const [resourceUrl, setResourceUrl] = useState('');
-  const [image, setImage] = useState<string | null>(null);
+  const [image, setImage] = useState<{ file: File; url: string } | null>(null);
 
   // —— 教案上传与自动识别 ——
   const [stage, setStage] = useState<Stage>('idle');
@@ -108,32 +113,42 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
     if (file) void handleFile(file);
   };
 
-  const submit = (e: React.FormEvent) => {
+  const [sending, setSending] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!role) return;
+    if (!role || sending) return;
     const isTeacher = role === 'TEACHER';
     const body = content.trim();
 
-    onSubmit({
-      id: Date.now().toString(),
-      region: location.locationString.replace(/·/g, ' · '),
-      province: location.province,
-      city: location.city,
-      district: location.district,
-      lat: location.lat,
-      lon: location.lon,
-      title: title.trim() || `童眼看${location.district} · 行智开物`,
-      role,
-      school: school.trim() || `${location.district}行智开物实验学校`,
-      author: author.trim() || (isTeacher ? '开物导师' : `探索学员（${age}岁）`),
-      content: body || '这份成果刚放上课桌，说明还在整理中。',
-      imageUrl: image ?? undefined,
-      digitalResourceUrl: resourceUrl.trim() || undefined,
-      date: '刚刚',
-      // 教师教案：带上已识别好的雷达图，App 只在这份还没跑过 AI 时才补算
-      radar: isTeacher ? radar ?? analyzeLessonSync(body) : undefined,
-    });
-    storySound.playPinDrop();
+    setSending(true);
+    try {
+      const ok = await onSubmit(
+        {
+          id: Date.now().toString(),
+          region: location.locationString.replace(/·/g, ' · '),
+          province: location.province,
+          city: location.city,
+          district: location.district,
+          lat: location.lat,
+          lon: location.lon,
+          title: title.trim() || `童眼看${location.district} · 行智开物`,
+          role,
+          school: school.trim() || `${location.district}行智开物实验学校`,
+          author: author.trim() || (isTeacher ? '开物导师' : `探索学员（${age}岁）`),
+          content: body || '这份成果刚放上课桌，说明还在整理中。',
+          digitalResourceUrl: resourceUrl.trim() || undefined,
+          date: '刚刚',
+          // 教师教案：带上已识别好的雷达图，App 只在这份还没跑过 AI 时才补算
+          radar: isTeacher ? radar ?? analyzeLessonSync(body) : undefined,
+        },
+        image?.file ?? null
+      );
+      if (ok === false) return;
+      storySound.playPinDrop();
+    } finally {
+      setSending(false);
+    }
   };
 
   const teacher = role === 'TEACHER';
@@ -404,7 +419,12 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
                 accept="image/*"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) setImage(URL.createObjectURL(file));
+                  if (file) {
+                    setImage((prev) => {
+                      if (prev) URL.revokeObjectURL(prev.url);
+                      return { file, url: URL.createObjectURL(file) };
+                    });
+                  }
                 }}
                 style={{ paddingTop: 10 }}
               />
@@ -412,7 +432,7 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
 
             {image && (
               <img
-                src={image}
+                src={image.url}
                 alt="成果图片预览"
                 style={{ width: '100%', height: 130, objectFit: 'cover', borderRadius: 12 }}
               />
@@ -422,8 +442,8 @@ export default function RoleDialog({ location, onClose, onSubmit }: RoleDialogPr
               <button type="button" className="btn btn--quiet" onClick={() => setStep('role')}>
                 重选身份
               </button>
-              <button type="submit" className="btn btn--full" disabled={busy}>
-                {busy ? '识别中…' : '归档到课桌'}
+              <button type="submit" className="btn btn--full" disabled={busy || sending}>
+                {sending ? '归档中…' : busy ? '识别中…' : '归档到课桌'}
               </button>
             </div>
           </form>

@@ -1,17 +1,16 @@
-import { createWorkBuddyCloud } from '@tencent-ai/workbuddy-cloud-sdk';
 import type { Role, WorkItem } from '../types';
-import { CLOUD_ORIGIN, cloudReachable, PUBLIC_CONFIG, themeKeyOf } from './cloudConfig';
+import { CLOUD_ORIGIN, cloudReachable, themeKeyOf } from './cloudConfig';
 import type { ThemePhoto } from './cloudConfig';
+import { cloud } from './cloudClient';
 
 /**
- * 云服务连接。
+ * 照片墙的数据访问层。
  *
- * publishableKey 只标识"是哪个应用"，本身不含任何权限，服务端按 Origin 校验，
- * 所以它可以随前端发布；真正有权限的东西一律留在服务端。
- *
+ * 客户端单例已经挪到 cloudClient.ts（认证与作品库也要用它），这里只保留
+ * 「照片墙」这一块的查询与上传；对外仍然导出 cloud，老调用方不用改。
  * 这个文件会把 SDK 一起带进来，所以只该被按需 import —— 常量与纯函数都在 cloudConfig.ts。
  */
-export const cloud = createWorkBuddyCloud({ ...PUBLIC_CONFIG });
+export { cloud };
 
 export { CLOUD_ORIGIN, cloudReachable, themeKeyOf };
 export type { ThemePhoto };

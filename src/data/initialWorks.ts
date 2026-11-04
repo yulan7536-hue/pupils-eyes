@@ -180,7 +180,11 @@ export function loadSavedWorks(): WorkItem[] {
 export function saveWorks(works: WorkItem[]) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY_WORKS, JSON.stringify(works));
+    // 只留最近 60 条，并且不带图片：云端作品的缩略图一张几十 KB，
+    // 上百条就能把 5MB 的 localStorage 撑爆，连带贴纸库和任务进度一起写不进去。
+    // 图片本来就是联网才有意义的东西，离线时退回线稿图案即可。
+    const slim = works.slice(0, 60).map((w) => ({ ...w, imageUrl: undefined }));
+    localStorage.setItem(STORAGE_KEY_WORKS, JSON.stringify(slim));
   } catch (e) {
     console.error('Failed to save works', e);
   }

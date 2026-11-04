@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import Desk from './Desk';
 import ClayGlobe from './ClayGlobe';
 import Fireflies from './Fireflies';
+import AccountButton from './AccountButton';
 import { WISTERIA_STRANDS } from './wisteriaStrands';
 import type { PinItem, WorkItem } from '../types';
 
@@ -44,6 +45,11 @@ interface MainLawnProps {
   onReplay: () => void;
   /** 新增：《古墓丽影》风格 3D 文物建筑检视回调 */
   onInspectArtifact?: (key: string) => void;
+  /**
+   * 隐藏入口：标题 2 秒内连点 5 次进开发者后台。
+   * 不写进任何文案，也不放按钮——它只是给自己用的后门。
+   */
+  onOpenAdmin?: () => void;
 }
 
 const TUFTS = [46, 72, 38, 88, 56, 96, 44, 76, 50, 84, 40, 66, 34, 80, 48, 70, 42, 92, 54, 64];
@@ -76,12 +82,25 @@ export default function MainLawn({
   onSelectPin,
   onReplay,
   onInspectArtifact,
+  onOpenAdmin,
 }: MainLawnProps) {
   const slotRef = useRef<HTMLDivElement | null>(null);
   const [globeSize, setGlobeSize] = useState(600);
   const [dock, setDock] = useState({ x: 0, y: 0, scale: 0.3 });
   const [hover, setHover] = useState<{ pin: PinItem; x: number; y: number } | null>(null);
   const [isWisteriaSwaying, setIsWisteriaSwaying] = useState(false);
+
+  // 标题连点计数：2 秒窗口内满 5 次才认，手滑点两下不会误触
+  const titleTaps = useRef<number[]>([]);
+  const tapTitle = () => {
+    if (!onOpenAdmin) return;
+    const now = Date.now();
+    titleTaps.current = [...titleTaps.current.filter((t) => now - t < 2000), now];
+    if (titleTaps.current.length >= 5) {
+      titleTaps.current = [];
+      onOpenAdmin();
+    }
+  };
 
   const noteCount = useMemo(() => works.filter((w) => w.role === 'TEACHER').length, [works]);
   const albumCount = useMemo(() => works.filter((w) => w.role === 'STUDENT').length, [works]);
@@ -246,7 +265,7 @@ export default function MainLawn({
 
       {/* 5. 顶部双语题字 HUD */}
       <header className="hud">
-        <h1 className="hud__title">
+        <h1 className="hud__title" onClick={tapTitle}>
           <span className="hud__kicker">童眼看世界 · 行智开物</span>
           <span className="hud__kicker-en" lang="en">
             Through Children&apos;s Eyes · Mind &amp; Craft
@@ -257,6 +276,7 @@ export default function MainLawn({
           </span>
         </h1>
         <div className="hud__right">
+          <AccountButton />
           <button type="button" className="hud__action" onClick={onOpenUpload}>
             <span className="btn-cn">上传课题</span>
             <span className="btn-en" lang="en">

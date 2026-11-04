@@ -81,6 +81,23 @@ export async function getModel(id: string): Promise<Model3DItem | null> {
   }
 }
 
+/**
+ * 补一张缩略图。
+ *
+ * 模型生成完就有 glb 了，但那一刻还没有渲染器，拿不到真实的模样，
+ * 所以先存原照片当占位；等预览框把模型转起来之后，再从画布上抓一张
+ * 真正是"这个摆件"的图回来覆盖。恢复旧任务时也一样能补上。
+ */
+export async function updateModelThumb(id: string, thumb: string): Promise<void> {
+  try {
+    const item = await getModel(id);
+    if (!item) return;
+    await tx('readwrite', (s) => s.put({ ...item, thumb }) as IDBRequest<IDBValidKey>);
+  } catch {
+    /* 缩略图丢了不影响主流程 */
+  }
+}
+
 export async function removeModel(id: string): Promise<void> {
   try {
     await tx('readwrite', (s) => s.delete(id) as IDBRequest<undefined>);

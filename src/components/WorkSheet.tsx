@@ -3,6 +3,7 @@ import ClayMotif, { motifFor } from './ClayMotif';
 import RadarChart from './RadarChart';
 import PhotoWall from './PhotoWall';
 import type { WorkItem } from '../types';
+import { isCloudWork } from '../utils/worksStore';
 
 interface WorkSheetProps {
   work: WorkItem;
@@ -46,6 +47,17 @@ export default function WorkSheet({ work, onClose, onLike, onComment }: WorkShee
 
         <div className="sheet__body no-scrollbar">
           <h2 className="detail__title">{work.title}</h2>
+
+          {isCloudWork(work) && work.status !== 'approved' && (
+            <div className={`review-note review-note--${work.status}`}>
+              <b>{work.status === 'pending' ? '审核中' : '审核未通过'}</b>
+              <span>
+                {work.status === 'pending'
+                  ? '通过后会出现在公开成果墙里，现在只有你自己看得到。'
+                  : work.reviewNote || '可以修改后重新提交。'}
+              </span>
+            </div>
+          )}
           <div className="detail__meta">
             <span>{work.region}</span>
             <span>{work.school}</span>

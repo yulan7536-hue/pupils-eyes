@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ClayMotif, { motifFor } from './ClayMotif';
 import type { WorkItem } from '../types';
 import { storySound } from '../utils/sound';
+import { isCloudWork } from '../utils/worksStore';
 
 interface PopUpBookProps {
   works: WorkItem[];
@@ -505,6 +506,12 @@ export default function PopUpBook({ works, onClose, onOpenWork }: PopUpBookProps
                 <span className="pop3d__mark">学生成果 · Student Work</span>
 
                 <h2 className="pop3d__title">{active.title}</h2>
+
+                {isCloudWork(active) && active.status !== 'approved' && (
+                  <span className={`review-badge review-badge--${active.status}`}>
+                    {active.status === 'pending' ? '审核中 · 仅自己可见' : '未通过 · 可修改后重提'}
+                  </span>
+                )}
 
                 <p className="pop3d__by">
                   <span className="pop3d__who">{active.author}</span>

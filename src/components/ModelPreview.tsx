@@ -15,10 +15,14 @@ interface ModelPreviewProps {
   onConfirm: () => void;
   onRetry: () => void;
   onDiscard: () => void;
+  /** 从画布上抓到一张真正是这个摆件的缩略图（只回调一次） */
+  onSnapshot?: (dataUrl: string) => void;
 }
 
-export default function ModelPreview({ item, onConfirm, onRetry, onDiscard }: ModelPreviewProps) {
+export default function ModelPreview({ item, onConfirm, onRetry, onDiscard, onSnapshot }: ModelPreviewProps) {
   const mountRef = useRef<HTMLDivElement>(null);
+  const snapRef = useRef(onSnapshot);
+  snapRef.current = onSnapshot;
 
   useEffect(() => {
     const el = mountRef.current;
@@ -60,6 +64,7 @@ export default function ModelPreview({ item, onConfirm, onRetry, onDiscard }: Mo
     controls.autoRotateSpeed = 1.6;
 
     let disposed = false;
+    let loaded = false;
     const url = URL.createObjectURL(item.glb);
     new GLTFLoader().load(
       url,
@@ -79,6 +84,7 @@ export default function ModelPreview({ item, onConfirm, onRetry, onDiscard }: Mo
         obj.position.z -= center.z;
         obj.position.y -= box2.min.y;
         scene.add(obj);
+        loaded = true;
       },
       undefined,
       (err) => {
@@ -88,10 +94,34 @@ export default function ModelPreview({ item, onConfirm, onRetry, onDiscard }: Mo
     );
 
     let animId = 0;
+    let frames = 0;
+    let snapped = false;
     const tick = () => {
       animId = requestAnimationFrame(tick);
       controls.update();
       renderer.render(scene, camera);
+
+      // 模型加载完、转起来之后再抓一张：这时候画面里是这个摆件本身，
+      // 而不是一张"原照片当封面"的占位图。缩到 320 宽，够卡片用又不撑体积。
+      frames += 1;
+      if (!snapped && loaded && frames > 24) {
+        snapped = true;
+        try {
+          const src = renderer.domElement;
+          const w = 320;
+          const h = Math.max(1, Math.round((w * src.height) / src.width));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(src, 0, 0, w, h);
+            snapRef.current?.(canvas.toDataURL('image/webp', 0.8));
+          }
+        } catch {
+          /* 抓不到就算了，退回原照片占位 */
+        }
+      }
     };
     tick();
 

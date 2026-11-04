@@ -4,6 +4,7 @@ import type { Role, WorkItem } from '../types';
 import { cloudReachable, themeKeyOf } from '../utils/cloudConfig';
 import type { ThemePhoto } from '../utils/cloudConfig';
 import { storySound } from '../utils/sound';
+import { useAuth } from '../auth/useAuth';
 
 /** 云 SDK 只在真要读写照片时才拉，别让它蹲在首屏包里 */
 const cloudStore = () => import('../utils/cloudStore');
@@ -25,6 +26,7 @@ const ROLE_LABEL: Record<Role, string> = { TEACHER: '老师', STUDENT: '学生' 
  * 点任意一张放大看。
  */
 export default function PhotoWall({ work, compact = false }: PhotoWallProps) {
+  const { requireAuth } = useAuth();
   const themeKey = themeKeyOf(work);
   // 站在不被云端放行的域名上（比如 GitHub Pages）就别发起请求了，直接说明去哪儿看
   const reachable = cloudReachable();
@@ -112,7 +114,8 @@ export default function PhotoWall({ work, compact = false }: PhotoWallProps) {
             className="photowall__add"
             onClick={() => {
               storySound.playPaperTurn();
-              setUploadOpen(true);
+              // 看照片谁都可以，往上加东西要登录
+              requireAuth(() => setUploadOpen(true));
             }}
           >
             <span className="photowall__add-icon" aria-hidden="true">

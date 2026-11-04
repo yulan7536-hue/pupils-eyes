@@ -11,7 +11,21 @@ import RoleDialog from './components/RoleDialog';
 import XingzhiStudio from './components/XingzhiStudio';
 import CollageScene from './components/CollageScene';
 import PinBurst from './components/PinBurst';
+import LoginDialog from './auth/LoginDialog';
+import { useAuth } from './auth/useAuth';
+import AdminGate from './admin/AdminGate';
+import AdminConsole from './admin/AdminConsole';
 import { loadSavedPins, loadSavedWorks, savePins, saveWorks } from './data/initialWorks';
+import {
+  addComment,
+  createWork,
+  getWorkImage,
+  listComments,
+  listMyLikes,
+  listWorks,
+  toggleLike,
+  type CloudWork,
+} from './utils/worksStore';
 import type { LocationChoice, PinItem, SubmissionPayload, WorkItem } from './types';
 import { storySound } from './utils/sound';
 import { analyzeLesson, analyzeLessonSync } from './utils/aiLesson';
@@ -57,7 +71,29 @@ const artifactDatabase: Record<string, {
   }
 };
 
+/**
+ * 作品 → 地球仪上的图钉。
+ * 图钉原本是独立存的一份数据，上云后统一从作品派生：一门课只有一份真相，
+ * 不会出现「球上有钉、相册里没有」这种两处不同步的情况。
+ */
+function pinsFromWorks(works: WorkItem[]): PinItem[] {
+  return works.map((w) => ({
+    id: w.id,
+    name: w.title,
+    city: w.region,
+    lat: w.lat,
+    lon: w.lon,
+    school: w.school,
+    desc: w.content.slice(0, 96) + (w.content.length > 96 ? '…' : ''),
+    author: w.author,
+    role: w.role,
+    date: w.date,
+  }));
+}
+
 export default function App() {
+  const { requireAuth, status, label } = useAuth();
+
   // 原有状态：全量保留
   const [step, setStep] = useState<Step>(() =>
     typeof window !== 'undefined' && ['#lawn', '#note', '#album', '#studio', '#collage'].includes(window.location.hash)
@@ -78,6 +114,41 @@ export default function App() {
     [works]
   );
 
+  /**
+   * 从云端拉作品库。
+   *
+   * 登录态一变就重拉：RLS 决定「能看到哪些」——匿名只看得到审核通过的，
+   * 登录后自己的待审稿会一起回来。拉不到（离线/域名不对）就继续用本地缓存，
+   * 不白屏，这是能离线看的前提。
+   */
+  useEffect(() => {
+    if (status === 'loading') return;
+    let alive = true;
+
+    void (async () => {
+      try {
+        const [remote, liked] = await Promise.all([
+          listWorks(),
+          // 只读自己的点赞：匿名时表里也读不到任何行（策略只给登录用户）
+          status === 'authed' ? listMyLikes().catch(() => new Set<string>()) : Promise.resolve(new Set<string>()),
+        ]);
+        if (!alive) return;
+        const merged = remote.map((w) => ({ ...w, lit: liked.has(w.id) }));
+        setWorks(merged);
+        setPins((prev) => [
+          ...pinsFromWorks(merged),
+          ...prev.filter((p) => p.id.startsWith('draft-')),
+        ]);
+      } catch (err) {
+        console.warn('[works] 云端读取失败，继续用本地缓存', err);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [status]);
+
   // 原有大模型教案雷达图逻辑：全量保留
   useEffect(() => {
     setWorks((prev) => {
@@ -93,8 +164,7 @@ export default function App() {
     });
   }, []);
 
-  const [globeOpen, setGlobeOpen] = useState(false);
-  const [target, setTarget] = useState<{ lat: number; lon: number } | null>(null);
+  const [globeOpen, setGlobeOpen] = useState(false);  const [target, setTarget] = useState<{ lat: number; lon: number } | null>(null);
   const [newPinId, setNewPinId] = useState<string | null>(null);
 
   const [book, setBook] = useState<'note' | 'album' | null>(() =>
@@ -111,6 +181,11 @@ export default function App() {
   // 拼贴花园模式
   const [collageOpen, setCollageOpen] = useState<boolean>(
     () => typeof window !== 'undefined' && window.location.hash === '#collage'
+  );
+
+  // 开发者后台：隐藏入口（标题连点 5 次，或直接 #admin）
+  const [adminOpen, setAdminOpen] = useState<boolean>(
+    () => typeof window !== 'undefined' && window.location.hash === '#admin'
   );
 
   const [regionOpen, setRegionOpen] = useState(false);
@@ -158,8 +233,11 @@ export default function App() {
 
   /* ---------------- 上传课题全流程：全量保留 ---------------- */
   const openUpload = () => {
-    storySound.playPaperTurn();
-    setRegionOpen(true);
+    // 写操作要身份：未登录先弹登录框，登录成功后自动把这一步续上
+    requireAuth(() => {
+      storySound.playPaperTurn();
+      setRegionOpen(true);
+    });
   };
 
   const confirmLocation = (
@@ -196,9 +274,16 @@ export default function App() {
     }, 780);
   };
 
-  const submitWork = (payload: SubmissionPayload) => {
-    const pin: PinItem = {
-      id: `pin-${payload.id}`,
+  /**
+   * 提交一份成果/课题。
+   *
+   * 先落云端，成功后才更新界面——反过来的话网络一失败，用户就会看到一条
+   * 「看起来发出去了、刷新就没了」的幽灵记录。数据库那边 RLS 强制 pending，
+   * 所以这份东西只有作者自己看得到，等后台审核通过才出现在公开列表里。
+   */
+  const submitWork = async (payload: SubmissionPayload, image?: File | null): Promise<boolean> => {
+    const draftPin: PinItem = {
+      id: `draft-${payload.id}`,
       name: payload.title,
       city: payload.region,
       lat: payload.lat,
@@ -210,38 +295,35 @@ export default function App() {
       desc: payload.content.slice(0, 96) + (payload.content.length > 96 ? '…' : ''),
     };
 
-    const work: WorkItem = {
-      ...payload,
-      id: `pin-${payload.id}`,
-      region: payload.region,
-      likes: 1,
-      comments: [
-        {
-          id: `c-${Date.now()}`,
-          user: '行智开物导师',
-          text: `已归档至课桌，童眼看 ${payload.district} 又多了一份实践。`,
-          time: '刚刚',
-        },
-      ],
-      radar: payload.radar,
-    };
+    say('正在归档…');
 
-    setPins((prev) => [pin, ...prev.filter((p) => !p.id.startsWith('draft-'))]);
+    let created: CloudWork;
+    try {
+      created = await createWork({ payload, image });
+    } catch (err) {
+      say(err instanceof Error ? err.message : '归档失败，请稍后再试');
+      return false;
+    }
+
+    const pin = { ...draftPin, id: created.id };
+
+    setPins((prev) => [pin, ...prev.filter((p) => !p.id.startsWith('draft-') && p.id !== created.id)]);
+    setWorks((prev) => [created, ...prev.filter((w) => w.id !== created.id)]);
     setNewPinId(pin.id);
-    setWorks((prev) => [work, ...prev]);
+    setRoleOpen(false);
+    setGlobeOpen(false);
 
     if (payload.role === 'TEACHER' && payload.radar?.source !== 'ai') {
       analyzeLesson(payload.content)
         .then((analysis) => {
-          setWorks((prev) => prev.map((w) => (w.id === work.id ? { ...w, radar: analysis } : w)));
+          setWorks((prev) => prev.map((w) => (w.id === created.id ? { ...w, radar: analysis } : w)));
         })
         .catch(() => {});
     }
 
-    setRoleOpen(false);
-    setGlobeOpen(false);
     later(() => setNewPinId(null), 2400);
-    say(`小灯已安放 · 童眼看 ${payload.district}`);
+    say(`已提交审核 · 童眼看 ${payload.district} · 通过后所有人可见`);
+    return true;
   };
 
   const openPin = (pin: PinItem) => {
@@ -250,11 +332,29 @@ export default function App() {
       works.find((w) => w.id === pin.id) ??
       works.find((w) => w.city === pin.city && w.district === district) ??
       works.find((w) => w.title === pin.name);
-    if (hit) {
-      setSheet(hit);
+    if (!hit) {
+      say(`这里还没有成果，${pin.name}`);
       return;
     }
-    say(`这里还没有成果，${pin.name}`);
+
+    setSheet(hit);
+
+    // 列表只带缩略图，点开这一刻才去取原图与评论 —— 否则一次要拉几十兆
+    void (async () => {
+      try {
+        const [img, comments] = await Promise.all([
+          getWorkImage(hit.id),
+          listComments(hit.id).catch(() => [] as typeof hit.comments),
+        ]);
+        setWorks((prev) =>
+          prev.map((w) =>
+            w.id === hit.id ? { ...w, imageUrl: img ?? w.imageUrl, comments } : w
+          )
+        );
+      } catch {
+        /* 取不到就保持缩略图，不打断阅读 */
+      }
+    })();
   };
 
   const replay = () => {
@@ -350,6 +450,13 @@ export default function App() {
   const sheetWork = sheet ? works.find((w) => w.id === sheet.id) ?? sheet : null;
   const currentArtifact = activeArtifactKey ? artifactDatabase[activeArtifactKey] : null;
 
+  // 后台是另一个界面：整屏接管，不需要开场动画、地球仪和 3D 场景
+  if (adminOpen) {
+    return (
+      <AdminGate>{(password) => <AdminConsole password={password} />}</AdminGate>
+    );
+  }
+
   return (
     <>
       {/* 阶段 1：开场视频全量保留 */}
@@ -388,12 +495,15 @@ export default function App() {
             setStudio(true);
           }}
           onOpenCollage={() => {
-            storySound.playPaperTurn();
-            setCollageOpen(true);
+            requireAuth(() => {
+              storySound.playPaperTurn();
+              setCollageOpen(true);
+            });
           }}
           onSelectPin={openPin}
           onReplay={replay}
           onInspectArtifact={(key: string) => setActiveArtifactKey(key)}
+          onOpenAdmin={() => setAdminOpen(true)}
         />
       )}
 
@@ -447,29 +557,37 @@ export default function App() {
           work={sheetWork}
           onClose={() => setSheet(null)}
           onLike={(id) => {
-            setWorks((prev) =>
-              prev.map((w) =>
-                w.id === id ? { ...w, likes: w.likes + 1, lit: true } : w
-              )
-            );
-            bumpTask('like');
-            say('球面上的小灯亮了 · 这份成果被点亮');
+            requireAuth(() => {
+              void (async () => {
+                try {
+                  const res = await toggleLike(id);
+                  setWorks((prev) =>
+                    prev.map((w) => (w.id === id ? { ...w, likes: res.likes, lit: res.liked } : w))
+                  );
+                  if (res.liked) {
+                    bumpTask('like');
+                    say('球面上的小灯亮了 · 这份成果被点亮');
+                  }
+                } catch (e) {
+                  say(e instanceof Error ? e.message : '点亮失败，请稍后再试');
+                }
+              })();
+            });
           }}
-          onComment={(id, text) =>
-            setWorks((prev) =>
-              prev.map((w) =>
-                w.id === id
-                  ? {
-                      ...w,
-                      comments: [
-                        ...w.comments,
-                        { id: `c-${Date.now()}`, user: '同行学者', text, time: '刚刚' },
-                      ],
-                    }
-                  : w
-              )
-            )
-          }
+          onComment={(id, text) => {
+            requireAuth(() => {
+              void (async () => {
+                try {
+                  const c = await addComment(id, text, label ? `同行 ${label}` : '同行学者');
+                  setWorks((prev) =>
+                    prev.map((w) => (w.id === id ? { ...w, comments: [...w.comments, c] } : w))
+                  );
+                } catch (e) {
+                  say(e instanceof Error ? e.message : '便签没贴上去，稍后再试');
+                }
+              })();
+            });
+          }}
         />
       )}
 
@@ -528,6 +646,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <LoginDialog />
 
       {toast && <div className="toast">{toast}</div>}
     </>
