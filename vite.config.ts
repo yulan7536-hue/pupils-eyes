@@ -98,16 +98,22 @@ const dohLookup = (
   callback: (
     err: NodeJS.ErrnoException | null,
     address: string | dns.LookupAddress[],
-    family: number
+    family?: number
   ) => void
 ) => {
-  const fallback = () => dns.lookup(hostname, options, callback);
+  const fallback = () => dns.lookup(hostname, options, callback as never);
 
   void resolveViaDoh(hostname)
     .then((ip) => {
       // 只认合法 IPv4，DoH 偶发返回空/异常时立刻回退
-      if (ip && net.isIPv4(ip)) callback(null, ip, 4);
-      else fallback();
+      if (ip && net.isIPv4(ip)) {
+        // Node 22 的 https.request 会给 lookup 传 all:true，必须回数组；
+        // 回单个字符串会让 net 拿到 undefined，抛 Invalid IP address: undefined
+        if ((options as { all?: boolean }).all) callback(null, [{ address: ip, family: 4 }]);
+        else callback(null, ip, 4);
+      } else {
+        fallback();
+      }
     })
     .catch(fallback);
 };
