@@ -24,7 +24,22 @@ const py = (lat: number, h: number) => ((90 - lat) / 180) * h;
 
 type Poly = [number, number][];
 
-const CONTINENTS: { pts: Poly; color: string }[] = [
+/**
+ * 固定种子的伪随机。
+ * 水彩斑块与纸颗粒原来是 Math.random()，每次刷新位置都变 —— 既让人以为贴图在闪，
+ * 也没法对比调优。固定种子之后每次生成的纹理完全一致。
+ */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const CONTINENTS: { pts: Poly; color: string; alpha?: number; line?: boolean }[] = [
   {
     // 欧亚大陆（粗形，只求可辨）
     color: LAND,
@@ -78,6 +93,10 @@ const CONTINENTS: { pts: Poly; color: string }[] = [
   {
     // 青藏高原（浅土黄，给中国区域一个视觉落点）
     color: OCHRE,
+    // 半透明：满不透明的一块赭石压在陆地上像块污渍，化开一点才像水彩叠色
+    alpha: 0.5,
+    // 不勾海岸线：它是叠在陆地上的色斑，描边会变成一个泡泡
+    line: false,
     pts: [
       [74, 38], [86, 40], [100, 38], [102, 30], [94, 26], [80, 28], [74, 32],
     ],
@@ -85,6 +104,8 @@ const CONTINENTS: { pts: Poly; color: string }[] = [
   {
     // 撒哈拉
     color: OCHRE,
+    alpha: 0.42,
+    line: false,
     pts: [
       [16, 26], [30, 28], [36, 20], [30, 14], [18, 16],
     ],
@@ -113,44 +134,64 @@ function polyPath(ctx: CanvasRenderingContext2D, pts: Poly, w: number, h: number
   ctx.closePath();
 }
 
-export function createClayEarthTexture(width = 2048, height = 1024): THREE.CanvasTexture {
+export function createClayEarthTexture(
+  width = 2048,
+  height = 1024,
+  anisotropy = 4
+): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
+  const rand = mulberry32(0x9e3779b9);
 
   if (ctx) {
     // 海：青蓝底色上叠一块块水彩「晕染斑」（bloom），颜料在水里化开，边缘不是硬圆
     ctx.fillStyle = OCEAN;
     ctx.fillRect(0, 0, width, height);
 
+    /**
+     * 圆形晕染。左右各多画一份（±width）：跨 180° 经线的斑块本来会在接缝处
+     * 被切出一条直边，球转到背面时那道缝正好露在正中间。
+     */
+    const bloom = (
+      cx: number,
+      cy: number,
+      r: number,
+      inner: number,
+      stops: [number, string][]
+    ) => {
+      for (const dx of [-width, 0, width]) {
+        const g = ctx.createRadialGradient(cx + dx, cy, inner, cx + dx, cy, r);
+        for (const [at, color] of stops) g.addColorStop(at, color);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(cx + dx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    };
+
     for (let i = 0; i < 26; i++) {
-      const cx = Math.random() * width;
-      const cy = Math.random() * height;
-      const r = 90 + Math.random() * 240;
+      const cx = rand() * width;
+      const cy = rand() * height;
+      const r = 90 + rand() * 240;
       // 深青蓝水洗，向四周褪到透明
-      const g = ctx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r);
-      g.addColorStop(0, 'rgba(95, 179, 214, 0.72)');
-      g.addColorStop(0.5, 'rgba(95, 179, 214, 0.34)');
-      g.addColorStop(1, 'rgba(95, 179, 214, 0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fill();
+      bloom(cx, cy, r, r * 0.1, [
+        [0, 'rgba(95, 179, 214, 0.72)'],
+        [0.5, 'rgba(95, 179, 214, 0.34)'],
+        [1, 'rgba(95, 179, 214, 0)'],
+      ]);
     }
 
     // 少量 deep navy 深色水洗点缀，压出海的层次，又不抢大陆
     for (let i = 0; i < 10; i++) {
-      const cx = Math.random() * width;
-      const cy = Math.random() * height;
-      const r = 60 + Math.random() * 150;
-      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-      g.addColorStop(0, 'rgba(91, 124, 140, 0.34)');
-      g.addColorStop(1, 'rgba(91, 124, 140, 0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fill();
+      const cx = rand() * width;
+      const cy = rand() * height;
+      const r = 60 + rand() * 150;
+      bloom(cx, cy, r, 0, [
+        [0, 'rgba(91, 124, 140, 0.34)'],
+        [1, 'rgba(91, 124, 140, 0)'],
+      ]);
     }
 
     // 左上到右下的淡色水洗，制造「颜料褪到纸张」的留白感
@@ -160,9 +201,33 @@ export function createClayEarthTexture(width = 2048, height = 1024): THREE.Canva
     ctx.fillStyle = wash;
     ctx.fillRect(0, 0, width, height);
 
-    // 极冰：北极直接盖，南极用垂直渐变随球面渐隐，避免在球底形成硬边椭圆污渍
-    ctx.fillStyle = ICE;
-    ctx.fillRect(0, 0, width, py(82, height));
+    /*
+     * 极冰：北极用渐变收边，不再 fillRect 一刀切。
+     * 硬边在球顶会投影成一圈生硬的圆，而球顶恰好是等距投影压缩最厉害、
+     * 最容易糊成一块的地方，硬边会把这个问题放大。
+     */
+    const northEnd = py(70, height);
+    const northGrad = ctx.createLinearGradient(0, 0, 0, northEnd);
+    northGrad.addColorStop(0, ICE);
+    northGrad.addColorStop(0.45, 'rgba(251, 247, 234, 0.9)');
+    northGrad.addColorStop(1, 'rgba(251, 247, 234, 0)');
+    ctx.fillStyle = northGrad;
+    ctx.fillRect(0, 0, width, northEnd);
+
+    // 冰缘的笔刷毛边：24 条短弧，让渐变边界读起来像笔扫过，而不是喷雾
+    ctx.strokeStyle = 'rgba(251, 247, 234, 0.5)';
+    ctx.lineWidth = 2.4;
+    const iceTop = py(78, height);
+    const iceBottom = py(66, height);
+    for (let i = 0; i < 24; i++) {
+      const y = iceTop + rand() * (iceBottom - iceTop);
+      const x = rand() * width;
+      const len = 30 + rand() * 90;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(x + len * 0.5, y - 8 - rand() * 10, x + len, y + rand() * 6);
+      ctx.stroke();
+    }
 
     const southTop = py(-64, height); // 渐变起点（较北、更靠近赤道）
     const southBottom = height; // 球底
@@ -174,7 +239,7 @@ export function createClayEarthTexture(width = 2048, height = 1024): THREE.Canva
     ctx.fillRect(0, southTop, width, southBottom - southTop);
 
     // 大陆：先描一圈淡色「水迹边」（颜料在边缘堆积回渗），再压上本体的暖色
-    CONTINENTS.forEach(({ pts, color }) => {
+    CONTINENTS.forEach(({ pts, color, alpha = 1, line = true }) => {
       ctx.save();
       ctx.translate(5, 6);
       polyPath(ctx, pts, width, height);
@@ -183,8 +248,29 @@ export function createClayEarthTexture(width = 2048, height = 1024): THREE.Canva
       ctx.restore();
 
       polyPath(ctx, pts, width, height);
+      ctx.save();
+      ctx.globalAlpha = alpha;
       ctx.fillStyle = color;
       ctx.fill();
+      ctx.restore();
+
+      /*
+       * 海岸线：宽而淡的一圈 + 细而实的一条。
+       * 只填色不勾线，大陆在放大态就是一块色斑；一圈赭色墨线立刻把它读成
+       * "画出来的地方"，也跟整站的墨线风格对上。宽度按画布尺寸缩放。
+       */
+      if (line) {
+        const scale = width / 2048;
+        ctx.save();
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = 'rgba(150, 104, 58, 0.16)';
+        ctx.lineWidth = 6 * scale;
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(132, 88, 46, 0.34)';
+        ctx.lineWidth = 1.9 * scale;
+        ctx.stroke();
+        ctx.restore();
+      }
 
       // 泥块内部的明暗：改用水彩晕染（柔边径向渐变），不是硬边椭圆
       ctx.save();
@@ -247,29 +333,30 @@ export function createClayEarthTexture(width = 2048, height = 1024): THREE.Canva
     for (let i = 0; i < 46; i++) {
       ctx.strokeStyle =
         i % 2 === 0 ? 'rgba(235, 245, 246, 0.06)' : 'rgba(120, 156, 172, 0.06)';
-      ctx.lineWidth = 1 + Math.random() * 2;
+      ctx.lineWidth = 1 + rand() * 2;
       ctx.beginPath();
-      const sx = Math.random() * width;
-      const sy = Math.random() * height;
-      ctx.arc(sx, sy, 18 + Math.random() * 66, Math.random() * Math.PI, Math.random() * Math.PI + 1.1);
+      const sx = rand() * width;
+      const sy = rand() * height;
+      ctx.arc(sx, sy, 18 + rand() * 66, rand() * Math.PI, rand() * Math.PI + 1.1);
       ctx.stroke();
     }
 
     // 纸面颗粒：水彩的 granulation，细小半透明噪点，比黏土的纯色方块更轻
     ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
     for (let i = 0; i < 2400; i++) {
-      ctx.fillRect(Math.random() * width, Math.random() * height, 1.6, 1.6);
+      ctx.fillRect(rand() * width, rand() * height, 1.6, 1.6);
     }
     ctx.fillStyle = 'rgba(96, 122, 132, 0.09)';
     for (let i = 0; i < 1700; i++) {
-      ctx.fillRect(Math.random() * width, Math.random() * height, 2, 2);
+      ctx.fillRect(rand() * width, rand() * height, 2, 2);
     }
   }
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
-  texture.anisotropy = 4;
+  // 球顶/球底正是掠射角最大的地方，最吃各向异性过滤。实际值由调用方按档位取 min(硬件上限)
+  texture.anisotropy = anisotropy;
   return texture;
 }
 

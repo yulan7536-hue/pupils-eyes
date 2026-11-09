@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { createClayEarthTexture, createClayNormalTexture } from '../utils/clayTextures';
+import { buildStudioEnvMap } from '../utils/globeEnv';
+import { collectFrameSamples, frameGlobeCamera } from '../utils/globeFraming';
+import { getGlobeParams, pickGlobeTier } from '../utils/globeQuality';
 import { storySound } from '../utils/sound';
 import GlobeFallback from './GlobeFallback';
 import type { PinItem } from '../types';
@@ -53,6 +56,36 @@ function getGlowTexture(): THREE.Texture {
   glowTexture = new THREE.CanvasTexture(canvas);
   glowTexture.colorSpace = THREE.SRGBColorSpace;
   return glowTexture;
+}
+
+/**
+ * 底座下面的接触阴影贴图。
+ *
+ * 落座态有 CSS 的 ::after 兜着，但放大态画布浮在页面中央、外面没有任何承托，
+ * 底座会显得悬空。这张横椭圆假 AO 把球"按"住。
+ * ctx.scale 把圆压扁，匹配 4.75° 俯视下圆盘的投影椭圆率。
+ */
+let contactShadowTexture: THREE.Texture | null = null;
+function getContactShadowTexture(): THREE.Texture {
+  if (contactShadowTexture) return contactShadowTexture;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.translate(size / 2, size / 2);
+  ctx.scale(1, 0.42);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, size / 2);
+  g.addColorStop(0, 'rgba(88, 62, 38, 0.85)');
+  g.addColorStop(0.45, 'rgba(88, 62, 38, 0.42)');
+  g.addColorStop(0.7, 'rgba(88, 62, 38, 0.12)');
+  g.addColorStop(1, 'rgba(88, 62, 38, 0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
+  ctx.fill();
+  contactShadowTexture = new THREE.CanvasTexture(canvas);
+  contactShadowTexture.colorSpace = THREE.SRGBColorSpace;
+  return contactShadowTexture;
 }
 
 /** 一盏灯的动画状态：p = 亮起进度 0→1，flash = 刚被点亮时那一下过曝 */
@@ -125,6 +158,14 @@ export default function ClayGlobe({
   const globeRef = useRef<THREE.Group | null>(null);
   const pinsRef = useRef<THREE.Group | null>(null);
   const ripplesRef = useRef<THREE.Group | null>(null);
+  /** PMREM 产出的环境贴图，销毁时要连 renderTarget 一起 dispose */
+  const envTargetRef = useRef<THREE.WebGLRenderTarget | null>(null);
+  const envMapRef = useRef<THREE.Texture | null>(null);
+  /** 底座下的假 AO，落座/放大两档透明度 */
+  const aoRef = useRef<THREE.Sprite | null>(null);
+  /** 供渲染循环里的运行时降级用（闭包里的 size 会过期） */
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
 
   /** id → 灯的动画句柄。重建灯塔时同步重建，点亮时只改材质，不重建场景 */
   const lampsRef = useRef<Map<string, LampHandle>>(new Map());
@@ -150,6 +191,9 @@ export default function ClayGlobe({
   const zoomedRef = useRef(zoomed);
   useEffect(() => {
     zoomedRef.current = zoomed;
+    // 放大态没有桌面兜着，接触阴影要更实一点才不会显得球浮着
+    const ao = aoRef.current;
+    if (ao) (ao.material as THREE.SpriteMaterial).opacity = zoomed ? 0.42 : 0.18;
   }, [zoomed]);
 
   const targetQuatRef = useRef<THREE.Quaternion | null>(null);
@@ -162,65 +206,67 @@ export default function ClayGlobe({
     if (!container) return;
 
     const side = size || 600;
+    const params = getGlobeParams(pickGlobeTier());
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
-    /*
-     * 取景要同时兜住两样东西：球顶（y=+2.034）和底座圆盘的最低点（y=-2.89）。
-     * 只按球半径算视锥是不够的——圆盘半径 0.95，它靠镜头那一侧在透视下会被放大，
-     * 于是底座前沿比球体下缘还低出一截，直接掉到画布外面被切平，
-     * 看起来就像贴图贴了一半。这里联立「顶部留 2%、底部贴边」解出相机位置：
-     *   (2.034 - VIEW_Y) = 0.98 · tan(19°) · d
-     *   (2.890 + VIEW_Y) = 1.00 · tan(19°) · (d - 0.95)   ← 减 0.95 是圆盘半径带来的近距补偿
-     * 解得 VIEW_Y = -0.566、d ≈ 7.705。改底座尺寸就必须回来重解这两个式子。
-     *
-     * 相机再抬高 LIFT：纯水平视角下底座圆盘被压成一条线，看不到顶面，
-     * 于是它只能"站在台面前沿这一条线上"，怎么调都像浮着。
-     * 抬高约 4.7° 后圆盘顶面与台面顶带是同一个俯视透视，接触处才会变成椭圆。
-     */
-    const VIEW_Y = -0.566;
-    const LIFT = 0.64;
-    camera.position.set(0, VIEW_Y + LIFT, 7.705);
-    camera.lookAt(0, VIEW_Y, 0);
+    // 相机位置先不设：等球、铜架、底座都建好之后由 frameGlobeCamera 反解
+    const camera = new THREE.PerspectiveCamera(38, 1, 2, 24);
     cameraRef.current = camera;
 
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer = new THREE.WebGLRenderer({ antialias: params.antialias, alpha: true });
     } catch {
       // 这台机器没有 WebGL：退回 2D 黏土球，绝不能让整页白掉
       setFailed(true);
       return;
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(params.pixelRatio);
     renderer.setSize(side, side);
     renderer.setClearAlpha(0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    // 不用 ACES：它把黏土的泥色一律抬亮、去饱和，莫兰迪会变成灰白
-    renderer.toneMapping = THREE.NoToneMapping;
+    /*
+     * Neutral（Khronos PBR Neutral）而不是 ACES：ACES 会把莫兰迪泥色一律抬亮去饱和，
+     * 而 Neutral 在 0.8 以下几乎线性、不动中间调，只在亮部做保色相的压缩 ——
+     * 正好治"加了环境反射之后黄铜高光削平"，又保住了水彩的灰调。
+     */
+    renderer.toneMapping = THREE.NeutralToneMapping;
+    renderer.toneMappingExposure = 1.0;
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // 影棚光：暖主光 + 天青补光 + 背后轮廓光（水彩要更柔，压主光提环境光，少硬高光）
-    scene.add(new THREE.AmbientLight(0xfffbf2, 1.34));
+    // 黄铜的环境反射。只挂金属材质，不设 scene.environment —— 球是纸面，不该泛油光
+    const envTarget = buildStudioEnvMap(renderer, params.envSize[0], params.envSize[1]);
+    envTargetRef.current = envTarget;
+    envMapRef.current = envTarget.texture;
 
-    const key = new THREE.DirectionalLight(0xfff7e8, 1.25);
-    key.position.set(4.2, 5.6, 5.2);
+    /*
+     * 影棚光重配：环境光从 1.34 压到 0.72，主光提到 2.05。
+     * 总光量几乎不变，但 ambient 占比从 30% 降到 16% ——
+     * 受光面亮度保持，暗面沉下去，球才有体积，而不是一块被无影灯照平的贴图。
+     */
+    scene.add(new THREE.AmbientLight(0xfffbf2, 0.72));
+
+    const key = new THREE.DirectionalLight(0xfff4e2, 2.05);
+    key.position.set(4.6, 6.2, 5.4);
     scene.add(key);
 
-    const fill = new THREE.DirectionalLight(0xd7ecf2, 0.78);
-    fill.position.set(-5, -1.6, -3.4);
+    const fill = new THREE.DirectionalLight(0xd9edf3, 0.62);
+    fill.position.set(-5.2, -1.4, -3.2);
     scene.add(fill);
 
-    const rim = new THREE.DirectionalLight(0xffffff, 0.66);
-    rim.position.set(-2.4, 3.2, -5);
-    scene.add(rim);
+    if (params.lights >= 5) {
+      // 背后轮廓光：从纯白改暖白，避免后方一圈死白
+      const rim = new THREE.DirectionalLight(0xfff2dc, 0.85);
+      rim.position.set(-2.6, 3.4, -5.2);
+      scene.add(rim);
 
-    // 右下的暖反弹光，托住球的暗侧
-    const bounce = new THREE.DirectionalLight(0xfff0e0, 0.42);
-    bounce.position.set(4.5, -3.2, 2.4);
-    scene.add(bounce);
+      // 右下的暖反弹光，托住球的暗侧
+      const bounce = new THREE.DirectionalLight(0xffe9d2, 0.3);
+      bounce.position.set(4.6, -3.2, 2.6);
+      scene.add(bounce);
+    }
 
     const globe = new THREE.Group();
     // 初始把中国区域转向镜头（东经 105°，北纬 35°），北朝上、东朝右
@@ -229,41 +275,105 @@ export default function ClayGlobe({
     globeRef.current = globe;
 
     // —— 球体：水彩画在光滑纸面上，保持标准球体，不再手捏起伏 ——
-    const geom = new THREE.SphereGeometry(R, 96, 96);
+    const geom = new THREE.SphereGeometry(R, params.sphere[0], params.sphere[1]);
     geom.computeVertexNormals();
 
-    const albedo = createClayEarthTexture(2048, 1024);
-    const normal = createClayNormalTexture(512);
+    const albedo = createClayEarthTexture(
+      params.earthTexture[0],
+      params.earthTexture[1],
+      Math.min(params.anisotropy, renderer.capabilities.getMaxAnisotropy())
+    );
+    const normal = createClayNormalTexture(params.normalTexture);
 
     const mat = new THREE.MeshStandardMaterial({
       map: albedo,
       normalMap: normal,
-      normalScale: new THREE.Vector2(0.35, 0.35),
-      roughness: 0.46,
+      normalScale: new THREE.Vector2(0.28, 0.28),
+      roughness: 0.52,
       metalness: 0,
+      // 一点点环境反射：只要球面有"这盏灯在不在屋里"的暗示，不能照出镜面
+      envMap: envMapRef.current,
+      envMapIntensity: 0.22,
     });
-    globe.add(new THREE.Mesh(geom, mat));
+
+    /*
+     * 菲涅尔边缘光：水彩球在浅色背景里容易糊进去，靠一圈极窄的暖边把轮廓立起来。
+     * 不走「背后加一层加色球」——那样会盖住铜弧，也很容易做成发光球。
+     * 直接往自发光里加，零额外 draw call。
+     * 注入点已核对 three 0.187 的 meshphysical_frag：vViewPosition 有声明，
+     * normal 由 <normal_fragment_begin> 提供，<emissivemap_fragment> 正好在其后。
+     */
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uRimColor = { value: new THREE.Color(1.0, 0.94, 0.83) };
+      shader.uniforms.uRimStrength = { value: params.rimStrength };
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          '#include <common>\nuniform vec3 uRimColor;\nuniform float uRimStrength;'
+        )
+        .replace(
+          '#include <emissivemap_fragment>',
+          `#include <emissivemap_fragment>
+          // 用几何法线（vNormal）而不是被法线贴图扰动过的 normal：
+          // 后者在轮廓处高频抖动，会把边缘光打成一圈断续的白点
+          float rimF = 1.0 - clamp(dot(normalize(vViewPosition), normalize(vNormal)), 0.0, 1.0);
+          totalEmissiveRadiance += uRimColor * pow(rimF, 3.5) * uRimStrength;`
+        );
+    };
+    mat.customProgramCacheKey = () => 'globe-rim-v1';
+
+    const sphere = new THREE.Mesh(geom, mat);
+    // 小灯向外凸出约 0.1，取景时把球放大 5% 兜住它们，不必真的遍历每一盏灯
+    sphere.userData.frameInflate = 1.05;
+    globe.add(sphere);
 
     // —— 黄铜支架：一道半圆弧 + 立柱 + 圆盘底座（属于「桌子」，不能挂进会旋转的 globe 组） ——
     const baseGroup = new THREE.Group();
     scene.add(baseGroup);
 
+    const envMap = envMapRef.current;
     const brassMat = new THREE.MeshStandardMaterial({
-      color: 0xe8b878,
-      roughness: 0.5,
-      metalness: 0.28,
+      color: 0xe6b47c,
+      // 比第一版更亮一档：0.34 的粗糙度把柔光箱糊成一整片，看不出"铜在反光"
+      roughness: 0.29,
+      metalness: 0.62,
+      envMap,
+      envMapIntensity: 1.35,
     });
     const brassDeep = new THREE.MeshStandardMaterial({
-      color: 0xc98d52,
-      roughness: 0.55,
-      metalness: 0.24,
+      color: 0xc58a4e,
+      roughness: 0.38,
+      metalness: 0.58,
+      envMap,
+      envMapIntensity: 1.05,
     });
 
     // 弧：绕球一圈多一点，开口朝左下，像参考插画里那道抱住球的金色带
-    const arcGeom = new THREE.TorusGeometry(R + 0.24, 0.095, 16, 96, Math.PI * 1.02);
+    const arcGeom = new THREE.TorusGeometry(
+      R + 0.24,
+      0.095,
+      params.arcRadialSegments,
+      params.arcTubularSegments,
+      Math.PI * 1.02
+    );
     const arc = new THREE.Mesh(arcGeom, brassMat);
     arc.rotation.z = -Math.PI * 0.5;
     baseGroup.add(arc);
+
+    /*
+     * 弧的两端封球。
+     * TorusGeometry 是开口管，端面是个空心圆 —— 落座时看不出来，
+     * 一放大就能看见铜管被"剪断"的切口，非常掉价。
+     * 用两颗同样粗细的小铜球把端头收圆，读起来像故意做的球形端饰。
+     */
+    const arcCaps = new THREE.Group();
+    arcCaps.rotation.z = -Math.PI * 0.5;
+    for (const theta of [0, Math.PI * 1.02]) {
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.095, 20, 14), brassMat);
+      cap.position.set(Math.cos(theta) * (R + 0.24), Math.sin(theta) * (R + 0.24), 0);
+      arcCaps.add(cap);
+    }
+    baseGroup.add(arcCaps);
 
     // 弧的落点处一个小铜箍，把弧和立柱接上
     const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.12, 16), brassDeep);
@@ -282,21 +392,66 @@ export default function ClayGlobe({
      * 两层合计 0.4 高。原来直径 1.4、高 0.24，投影到屏幕上只有 90×20 像素，
      * 顶着 220 像素的球，怎么调都像被一根杆子举着。
      */
-    const discTop = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.78, 0.18, 48), brassMat);
+    const discTop = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.66, 0.78, 0.18, params.discSegments),
+      brassMat
+    );
     discTop.position.y = -(R + 0.58);
     baseGroup.add(discTop);
 
-    const discBottom = new THREE.Mesh(new THREE.CylinderGeometry(0.87, 0.95, 0.22, 48), brassDeep);
+    const discBottom = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.87, 0.95, 0.22, params.discSegments),
+      brassDeep
+    );
     discBottom.position.y = -(R + 0.78);
     baseGroup.add(discBottom);
 
     const pinsGroup = new THREE.Group();
+    // 小灯和光晕向外凸、又带加法光晕，混进取景采样会把画面压小
+    pinsGroup.userData.noFrame = true;
     globe.add(pinsGroup);
     pinsRef.current = pinsGroup;
 
     const ripples = new THREE.Group();
+    ripples.userData.noFrame = true;
     globe.add(ripples);
     ripplesRef.current = ripples;
+
+    // 底座下的接触阴影：落座态有 CSS 兜着，放大态画布外没有承托，靠它把球"按"住
+    const ao = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: getContactShadowTexture(),
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+        toneMapped: false,
+      })
+    );
+    ao.position.set(0, -2.86, 0.55);
+    ao.scale.set(2.6, 0.62, 1);
+    ao.userData.noFrame = true;
+    scene.add(ao);
+    aoRef.current = ao;
+
+    /*
+     * 取景：球、铜弧、立柱、底座全部建好之后，用真实顶点反解相机。
+     * 之前手解方程只兜了球顶和底座，漏了铜弧（外缘最高 2.335），
+     * 画布上边缘正好切在弧顶上 —— 那就是"地球仪顶部没了"。
+     */
+    const samples = collectFrameSamples(scene);
+    const frame = frameGlobeCamera(camera, samples);
+
+    if (import.meta.env.DEV) {
+      // 球面在画面里的直径（解析解）：sinθ = R/d
+      const sphereDia =
+        (2 * (R / Math.sqrt(frame.d * frame.d - R * R))) /
+        Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+      const report = { ...frame, sphereDia };
+      (window as unknown as { __globeFrame?: typeof report }).__globeFrame = report;
+      console.info('[globe-frame]', report);
+      console.assert(frame.top <= 1 && frame.bottom >= -1, '取景越界', report);
+      console.assert(frame.d > 7.5 && frame.d < 9.5, '相机距离异常，采样集可能混入远处物体', frame.d);
+    }
 
     /* ---------------- 交互 ---------------- */
     const canvas = renderer.domElement;
@@ -393,6 +548,17 @@ export default function ClayGlobe({
     const STEP = 1 / 14; // 定格动画的抽帧节奏
     let raf = 0;
 
+    /*
+     * 运行时降级：只降不升，避免在帧率边缘反复抖动。
+     * 前 30 帧跳过——着色器编译与贴图上传会造成假掉帧。
+     */
+    let frameCount = 0;
+    let accMs = 0;
+    let accFrames = 0;
+    let degraded = 0;
+    let fpsCap = params.targetFps;
+    let lastRenderAt = 0;
+
     /**
      * 把动画状态刷到材质上。
      * 熄灭：只剩玻璃的一点温色；点亮：灯珠过曝成暖白，外圈光晕化开。
@@ -476,7 +642,36 @@ export default function ClayGlobe({
         }
       }
 
+      // 低配档限帧：状态照常更新，只省掉渲染
+      const minInterval = 1000 / fpsCap;
+      if (now - lastRenderAt < minInterval - 1.5) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      lastRenderAt = now;
+
       renderer.render(scene, camera);
+
+      // 帧时长统计：每 60 帧结算一次，只降不升
+      frameCount++;
+      if (frameCount > 30) {
+        accMs += Math.min(dt * 1000, 60); // 切标签页回来的巨大 delta 不参与
+        accFrames++;
+        if (accFrames >= 60) {
+          const avg = accMs / accFrames;
+          accMs = 0;
+          accFrames = 0;
+          if (degraded === 0 && avg > 20) {
+            degraded = 1;
+            renderer.setPixelRatio(Math.max(1, Math.min(renderer.getPixelRatio(), 1.5)));
+            renderer.setSize(sizeRef.current, sizeRef.current);
+          } else if (degraded === 1 && avg > 26 && fpsCap > 30) {
+            degraded = 2;
+            fpsCap = 30;
+          }
+        }
+      }
+
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -487,13 +682,20 @@ export default function ClayGlobe({
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', onPointerUp);
       canvas.removeEventListener('pointerleave', onPointerLeave);
-      geom.dispose();
-      mat.dispose();
+      /*
+       * 通用销毁：以前只 dispose 了 7 个对象，铜箍、立柱、两个圆盘的几何
+       * 每次热更新都漏一批。这里整棵树走一遍。
+       */
+      scene.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        mesh.geometry?.dispose?.();
+        const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(material)) material.forEach((m) => m.dispose());
+        else material?.dispose?.();
+      });
       albedo.dispose();
       normal.dispose();
-      arcGeom.dispose();
-      brassMat.dispose();
-      brassDeep.dispose();
+      envTarget.dispose();
       renderer.dispose();
       container.innerHTML = '';
     };
@@ -571,8 +773,10 @@ export default function ClayGlobe({
       // 灯圈用赭石金，跟泥做的灯托拉开材质，小灯才有一圈"金属灯口"的高光
       const rimMat = new THREE.MeshStandardMaterial({
         color: 0xd0a25e,
-        roughness: 0.38,
-        metalness: 0.4,
+        roughness: 0.3,
+        metalness: 0.55,
+        envMap: envMapRef.current,
+        envMapIntensity: 1.0,
       });
 
       /*

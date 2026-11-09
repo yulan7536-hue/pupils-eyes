@@ -1289,13 +1289,14 @@ button {
 .globe-slot {
   position: relative;
   flex: 0 0 auto;
-  width: calc(var(--u) * 28);
-  height: calc(var(--u) * 28);
-  /* 画布底边就是铜座下沿（取景时让它贴边），再比物件基线多沉 0.2u。
-     关键是要算上圆盘底缘的椭圆：俯视 4.6° 下，直径 1.6 的圆盘投影出
-     约 7px 高的椭圆，中心最低、两侧比中心高 7px。只沉到台面上沿的话，
-     底座两侧会露在台面前面的草地上——看着就是悬空的。 */
-  margin-bottom: calc(var(--u) * -0.6);
+  /* 取景改成自动反解之后，为了兜住铜弧，球在画布里的占比从 78.5% 降到 71%。
+     槽从 28u 提到 30u 把屏幕上的球径补回来（148 → 144px），代价只是桌排宽 2u。
+     宽高必须同步：.globe-layer 按槽宽缩放、按矩形中心定位，只改宽会让底座陷进桌面。 */
+  width: calc(var(--u) * 30);
+  height: calc(var(--u) * 30);
+  /* 画布底边不再等于铜座下沿（底部留了 2% 余量），把槽再往下压半个单位，
+     让圆盘底缘仍然压在台面顶带上。改完必须截图核对底座没有浮起来。 */
+  margin-bottom: calc(var(--u) * -0.85);
 }
 
 /* 长凳正面的藏品牌：烫在木料上的两行小字，居中 */
@@ -1343,7 +1344,7 @@ button {
   height: calc(var(--u) * 1.7);
   transform: translateX(-50%);
   border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 0%, rgba(58, 40, 22, 0.62), rgba(58, 40, 22, 0) 70%); /* taste-skill-ignore gradient: 黏土静物接触阴影只能靠渐变铺出由实到虚的过渡 */
+  background: radial-gradient(ellipse at 50% 0%, rgba(58, 40, 22, 0.45), rgba(58, 40, 22, 0) 70%); /* taste-skill-ignore gradient: 黏土静物接触阴影只能靠渐变铺出由实到虚的过渡 */
   filter: blur(calc(var(--u) * 0.2));
   pointer-events: none;
 }
